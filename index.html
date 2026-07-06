@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d4ed8">
+<title>RH · Livion Solutions</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231d4ed8'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3ERH%3C/text%3E%3C/svg%3E">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/msal-browser/2.38.4/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#eef2f8; --card:#ffffff; --ink:#101a30; --mut:#5d6b85; --line:#e2e8f2;
+  --brand:#1d4ed8; --brand-dark:#1e3fae; --brand-soft:#e4ecff;
+  --ok:#15803d; --ok-soft:#dcf5e5; --warn:#b45309; --warn-soft:#fdeed4;
+  --bad:#b91c1c; --bad-soft:#fde4e4; --info:#1d4ed8; --info-soft:#e4ecff;
+  --gray-soft:#e9edf4;
+  --r:16px; --shadow:0 1px 2px rgba(16,26,48,.06),0 8px 24px -12px rgba(16,26,48,.14);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{font-size:16px}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font:inherit;color:inherit}
+a{color:var(--brand);text-decoration:none}
+img{display:block}
+.hide{display:none!important}
+
+/* ---------- layout ---------- */
+#shell{display:none;min-height:100dvh}
+#shell.on{display:block}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:236px;background:#0f1c3f;color:#e6ecfb;display:flex;flex-direction:column;padding:20px 14px;z-index:30}
+.sidebar .logo{display:flex;align-items:center;gap:10px;padding:2px 8px 18px;font-weight:800;font-size:1.05rem;letter-spacing:.2px}
+.sidebar .logo .mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#2f62ff,#1d4ed8);display:grid;place-items:center;font-size:.8rem;font-weight:800;color:#fff}
+.sidebar .logo small{display:block;font-weight:500;color:#8da2cf;font-size:.7rem}
+.snav{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.snav button{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:11px;color:#b6c4e6;font-weight:600;font-size:.93rem;text-align:left}
+.snav button svg{width:20px;height:20px;flex:none}
+.snav button:hover{background:rgba(255,255,255,.07);color:#fff}
+.snav button.on{background:var(--brand);color:#fff}
+.sidebar .foot{margin-top:auto;padding:10px 8px;font-size:.78rem;color:#8da2cf;display:flex;align-items:center;gap:10px}
+.sidebar .foot .uav{width:34px;height:34px;border-radius:50%;background:#2f62ff;display:grid;place-items:center;color:#fff;font-weight:700;font-size:.8rem;flex:none}
+.sidebar .foot b{color:#e6ecfb;display:block;font-size:.82rem;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sidebar .foot button{color:#8da2cf;font-size:.75rem;padding:0;text-decoration:underline}
+#main{padding:26px 30px 110px;max-width:1060px;margin:0 auto}
+@media(min-width:861px){
+  #main{margin-left:236px;max-width:none}
+  .mtop,.bnav{display:none}
+}
+@media(max-width:860px){
+  .sidebar{display:none}
+  #main{padding:14px 14px 96px}
+  .mtop{position:sticky;top:0;z-index:25;background:rgba(238,242,248,.92);backdrop-filter:blur(10px);display:flex;align-items:center;gap:10px;padding:12px 2px;margin:-14px -2px 8px}
+  .mtop .mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#2f62ff,#1d4ed8);display:grid;place-items:center;font-size:.72rem;font-weight:800;color:#fff}
+  .mtop b{font-size:1rem}
+  .mtop small{display:block;color:var(--mut);font-size:.7rem}
+  .bnav{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .bnav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.64rem;font-weight:600;color:var(--mut);padding:4px 10px;border-radius:10px;min-width:58px}
+  .bnav button svg{width:22px;height:22px}
+  .bnav button.on{color:var(--brand)}
+}
+
+/* ---------- components ---------- */
+.h1{font-size:1.35rem;font-weight:800;margin-bottom:2px}
+.sub{color:var(--mut);font-size:.88rem;margin-bottom:18px}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:18px}
+.grid{display:grid;gap:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 16px;cursor:pointer}
+.stat .n{font-size:1.7rem;font-weight:800;line-height:1.1}
+.stat .l{color:var(--mut);font-size:.78rem;font-weight:600;margin-top:2px}
+.stat.accent .n{color:var(--brand)}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:.7rem;font-weight:700;white-space:nowrap}
+.b-ok{background:var(--ok-soft);color:var(--ok)} .b-bad{background:var(--bad-soft);color:var(--bad)}
+.b-warn{background:var(--warn-soft);color:var(--warn)} .b-info{background:var(--info-soft);color:var(--info)}
+.b-gray{background:var(--gray-soft);color:var(--mut)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px;margin-bottom:12px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;padding:8px 15px;border-radius:999px;background:#fff;border:1px solid var(--line);font-size:.82rem;font-weight:600;color:var(--mut)}
+.chip.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.search{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:13px;padding:11px 14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.search input{flex:1;border:none;outline:none;background:none;font-size:.95rem}
+.search svg{width:18px;height:18px;color:var(--mut);flex:none}
+.plist{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}
+.pcard{display:flex;align-items:center;gap:13px;background:#fff;border-radius:var(--r);box-shadow:var(--shadow);padding:13px 15px;cursor:pointer;transition:transform .08s}
+.pcard:active{transform:scale(.98)}
+.av{border-radius:50%;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center;font-weight:800;background-size:cover;background-position:center;flex:none}
+.av.big{width:84px;height:84px;font-size:1.6rem}
+.av.md{width:52px;height:52px;font-size:1.05rem}
+.pcard .inf{flex:1;min-width:0}
+.pcard .inf b{display:block;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pcard .inf span{display:block;color:var(--mut);font-size:.78rem;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fab{position:fixed;right:20px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:26;background:var(--brand);color:#fff;border-radius:999px;padding:15px 22px;font-weight:700;font-size:.9rem;box-shadow:0 10px 26px -8px rgba(29,78,216,.6);display:flex;align-items:center;gap:8px}
+@media(min-width:861px){.fab{bottom:28px;right:34px}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-radius:11px;font-weight:700;font-size:.85rem;background:var(--brand);color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.sec{background:var(--brand-soft);color:var(--brand)}
+.btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.btn.danger{background:var(--bad-soft);color:var(--bad)}
+.btn.sm{padding:7px 12px;font-size:.78rem;border-radius:9px}
+.iconbtn{width:34px;height:34px;border-radius:9px;display:inline-grid;place-items:center;background:var(--gray-soft);color:var(--mut)}
+.iconbtn svg{width:16px;height:16px}
+.iconbtn:hover{background:var(--brand-soft);color:var(--brand)}
+
+/* ficha */
+.fichahead{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.fichahead .who{flex:1;min-width:200px}
+.fichahead h2{font-size:1.3rem;font-weight:800;line-height:1.2}
+.fichahead .role{color:var(--mut);font-size:.9rem;margin:3px 0 8px}
+.avwrap{position:relative;flex:none}
+.avwrap .cam{position:absolute;right:-2px;bottom:-2px;width:30px;height:30px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;border:3px solid #fff}
+.avwrap .cam svg{width:14px;height:14px}
+.quick{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:16px}
+.quick .q{background:var(--bg);border-radius:12px;padding:10px 12px}
+.quick .q small{display:block;color:var(--mut);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.quick .q b{font-size:.9rem}
+.tabs{display:flex;gap:4px;overflow-x:auto;margin:18px 0 12px;background:#fff;border-radius:13px;padding:5px;box-shadow:var(--shadow);scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:1;white-space:nowrap;padding:9px 14px;border-radius:9px;font-weight:700;font-size:.82rem;color:var(--mut)}
+.tabs button.on{background:var(--brand);color:#fff}
+.dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:2px 18px}
+.dl .it{padding:9px 2px;border-bottom:1px solid var(--line)}
+.dl .it small{display:block;color:var(--mut);font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.dl .it span{font-size:.92rem}
+.rowitem{display:flex;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid var(--line)}
+.rowitem:last-child{border-bottom:none}
+.rowitem .inf{flex:1;min-width:0}
+.rowitem .inf b{font-size:.92rem;display:block}
+.rowitem .inf span{color:var(--mut);font-size:.78rem}
+.secttl{display:flex;align-items:center;justify-content:space-between;margin:4px 0 8px}
+.secttl h3{font-size:1rem;font-weight:800}
+.bar{height:8px;border-radius:99px;background:var(--gray-soft);overflow:hidden;flex:1}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--brand)}
+.distrow{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:.83rem}
+.distrow .lb{width:170px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.distrow .vl{width:26px;text-align:right;color:var(--mut);font-weight:700;flex:none}
+.empty{color:var(--mut);font-size:.88rem;text-align:center;padding:26px 10px}
+
+/* table */
+.tbl{width:100%;border-collapse:collapse;font-size:.87rem}
+.tbl th{text-align:left;color:var(--mut);font-size:.7rem;text-transform:uppercase;letter-spacing:.4px;padding:8px 10px;border-bottom:2px solid var(--line)}
+.tbl td{padding:10px;border-bottom:1px solid var(--line)}
+.tbl tr:last-child td{border-bottom:none}
+
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(13,20,40,.5);z-index:50;display:grid;place-items:end center;backdrop-filter:blur(2px)}
+@media(min-width:640px){.overlay{place-items:center}}
+.modal{background:#fff;width:100%;max-width:560px;max-height:92dvh;overflow:auto;border-radius:22px 22px 0 0;padding:22px 20px calc(22px + env(safe-area-inset-bottom))}
+@media(min-width:640px){.modal{border-radius:20px}}
+.modal h3{font-size:1.1rem;font-weight:800;margin-bottom:16px}
+.fgrid{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+.fgrid .full{grid-column:1/-1}
+.fld label{display:block;font-size:.74rem;font-weight:700;color:var(--mut);margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
+.fld input,.fld select,.fld textarea{width:100%;border:1.5px solid var(--line);border-radius:11px;padding:11px 12px;font-size:.95rem;background:#fbfcfe;outline:none}
+.fld input:focus,.fld select:focus,.fld textarea:focus{border-color:var(--brand);background:#fff}
+.fld textarea{min-height:76px;resize:vertical}
+.modal .acts{display:flex;gap:10px;margin-top:20px}
+.modal .acts .btn{flex:1;padding:13px}
+
+/* toast / loading */
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom));z-index:80;background:#101a30;color:#fff;padding:12px 20px;border-radius:12px;font-size:.86rem;font-weight:600;box-shadow:var(--shadow);opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
+@media(min-width:861px){#toast{bottom:30px}}
+#toast.on{opacity:1}
+#busy{position:fixed;inset:0;z-index:70;background:rgba(238,242,248,.7);display:none;place-items:center;backdrop-filter:blur(2px)}
+#busy.on{display:grid}
+.spin{width:44px;height:44px;border-radius:50%;border:4px solid var(--brand-soft);border-top-color:var(--brand);animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* login / setup */
+.gate{min-height:100dvh;display:grid;place-items:center;padding:20px}
+.gate .card{width:100%;max-width:420px;padding:34px 28px;text-align:center}
+.gate .mark{width:66px;height:66px;border-radius:18px;background:linear-gradient(135deg,#2f62ff,#1d4ed8);display:grid;place-items:center;font-size:1.3rem;font-weight:800;color:#fff;margin:0 auto 16px}
+.gate h1{font-size:1.3rem;margin-bottom:6px}
+.gate p{color:var(--mut);font-size:.88rem;margin-bottom:22px}
+.gate .fld{text-align:left;margin-bottom:12px}
+.gate .btn{width:100%;padding:13px}
+.gate .tip{margin-top:16px;font-size:.76rem;color:var(--mut)}
+</style>
+</head>
+<body>
+<div id="gate" class="gate"><div class="card"><div class="mark">RH</div><h1>Recursos Humanos</h1><p>Livion Solutions · carregando…</p><div class="spin" style="margin:0 auto"></div></div></div>
+<div id="shell">
+  <aside class="sidebar">
+    <div class="logo"><div class="mark">RH</div><div>Recursos Humanos<small>Livion Solutions</small></div></div>
+    <nav class="snav" id="snav"></nav>
+    <div class="foot"><div class="uav" id="uav">·</div><div><b id="uname">—</b><button onclick="A.sair()">Sair</button></div></div>
+  </aside>
+  <div id="main"></div>
+  <nav class="bnav" id="bnav"></nav>
+</div>
+<div id="toast"></div>
+<div id="busy"><div class="spin"></div></div>
+<input type="file" id="fileFoto" accept="image/*" class="hide">
+<input type="file" id="fileGen" class="hide">
+<script>
+"use strict";
+/* =====================================================================
+   RH Livion — app único (HTML+JS) · dados no OneDrive via Microsoft Graph
+   ===================================================================== */
+const ICONS = {
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
+  team:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5"/><circle cx="17.5" cy="9.5" r="2.5"/><path d="M16 15.2c2.6.3 4.6 1.8 5.5 4.8"/></svg>',
+  proj:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  cash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h2.5L8 5.5h8L17.5 8H20a1.5 1.5 0 0 1 1.5 1.5V18a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 18V9.5A1.5 1.5 0 0 1 4 8Z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17l-1 4Z"/></svg>',
+  del:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13"/></svg>',
+  doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4"/></svg>',
+  open:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  cake:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21h16M5 21v-6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6"/><path d="M12 9V6.5"/><path d="M12 4.5c.8-.8.4-2-.0-2.5-.4.5-.8 1.7 0 2.5Z"/><path d="M5 16c1.5 1.6 3 .1 4.5 0s3 1.6 4.5 0 3 .1 4.5 0"/></svg>',
+  alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 10v4m0 3h.01"/></svg>',
+  link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7L12.5 18.5"/></svg>',
+  xls:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6Z"/><path d="M9 12l6 6m0-6-6 6"/></svg>',
+  cloud:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.9-8.9 6 6 0 0 1 11.7 1.6A4 4 0 0 1 17.5 18Z"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"/></svg>'
+};
+/* ---------------- configuração / autenticação ---------------- */
+const SCOPES = ["User.Read","Files.ReadWrite.All"];
+const DEFAULT_FOLDER = "(RECURSOS HUMANOS APP)";
+let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
+const thumbCache = new Map(), urlCache = new Map();
+
+function loadCfg(){
+  const q = new URLSearchParams(location.search);
+  if(q.get("cid")){
+    cfg = { cid:q.get("cid").trim(), tid:(q.get("tid")||"organizations").trim(), folder:(q.get("folder")||DEFAULT_FOLDER).trim() };
+    localStorage.setItem("rh_cfg", JSON.stringify(cfg));
+    history.replaceState(null,"",location.pathname);
+    return;
+  }
+  try{ cfg = JSON.parse(localStorage.getItem("rh_cfg")||"null"); }catch(e){ cfg = null; }
+}
+function gate(html){ const g=document.getElementById("gate"); g.classList.remove("hide"); g.innerHTML=html; document.getElementById("shell").classList.remove("on"); }
+function showSetup(err){
+  gate(`<div class="card"><div class="mark">RH</div><h1>Configuração inicial</h1>
+    <p>Cole os dados do registro do aplicativo no Microsoft Entra (veja o Guia de Instalação).${err?`<br><b style="color:var(--bad)">${err}</b>`:""}</p>
+    <div class="fld"><label>ID do aplicativo (cliente)</label><input id="s_cid" placeholder="ex.: 1b2c3d4e-…" value="${cfg?esc(cfg.cid):""}"></div>
+    <div class="fld"><label>ID do diretório (locatário)</label><input id="s_tid" placeholder="ex.: 9f8e7d6c-…" value="${cfg?esc(cfg.tid):""}"></div>
+    <div class="fld"><label>Nome da pasta no OneDrive</label><input id="s_folder" value="${cfg?esc(cfg.folder):DEFAULT_FOLDER}"></div>
+    <button class="btn" onclick="A.salvarSetup()">Salvar e entrar</button>
+    <div class="tip">Esses dados ficam salvos apenas neste dispositivo.</div></div>`);
+}
+function showLogin(){
+  gate(`<div class="card"><div class="mark">RH</div><h1>Recursos Humanos</h1>
+    <p>Livion Solutions</p>
+    <button class="btn" onclick="A.entrar()">Entrar com Microsoft</button>
+    <div class="tip"><a href="#" onclick="A.reconfig();return false">Alterar configuração</a></div></div>`);
+}
+function showFatal(msg, extra){
+  gate(`<div class="card"><div class="mark">RH</div><h1>Ops…</h1><p>${msg}</p>${extra||""}
+    <button class="btn ghost" style="margin-top:14px" onclick="location.reload()">Tentar novamente</button>
+    <div class="tip"><a href="#" onclick="A.reconfig();return false">Alterar configuração</a></div></div>`);
+}
+async function boot(){
+  loadCfg();
+  if(!cfg || !cfg.cid){ showSetup(); return; }
+  try{
+    msalApp = new msal.PublicClientApplication({
+      auth:{ clientId:cfg.cid, authority:"https://login.microsoftonline.com/"+cfg.tid, redirectUri:location.origin+location.pathname },
+      cache:{ cacheLocation:"localStorage" }
+    });
+    const resp = await msalApp.handleRedirectPromise();
+    if(resp && resp.account) msalApp.setActiveAccount(resp.account);
+    account = msalApp.getActiveAccount() || msalApp.getAllAccounts()[0] || null;
+    if(!account){ showLogin(); return; }
+    msalApp.setActiveAccount(account);
+    gate(`<div class="card"><div class="mark">RH</div><h1>Recursos Humanos</h1><p>Conectando ao OneDrive…</p><div class="spin" style="margin:0 auto"></div></div>`);
+    await resolveFolder();
+    await loadDB();
+    startApp();
+  }catch(e){
+    console.error(e);
+    if(String(e).includes("AADSTS")||String(e.errorCode||"").includes("invalid_client")) showSetup("Verifique os IDs informados.");
+    else showFatal("Não foi possível conectar: "+esc(e.message||String(e)));
+  }
+}
+async function token(){
+  try{ return (await msalApp.acquireTokenSilent({scopes:SCOPES, account})).accessToken; }
+  catch(e){ await msalApp.acquireTokenRedirect({scopes:SCOPES}); throw e; }
+}
+async function gfetch(path, opts={}, retry=true){
+  const t = await token();
+  const r = await fetch("https://graph.microsoft.com/v1.0"+path, {...opts, headers:{Authorization:"Bearer "+t, ...(opts.headers||{})}});
+  if(r.status===429 && retry){ const w=+(r.headers.get("Retry-After")||2); await new Promise(s=>setTimeout(s,w*1000)); return gfetch(path,opts,false); }
+  return r;
+}
+async function gjson(path, opts){ const r = await gfetch(path, opts); if(!r.ok){ const b=await r.text(); const err=new Error("Graph "+r.status+": "+b.slice(0,200)); err.status=r.status; throw err; } return r.status===204?null:r.json(); }
+function encPath(rel){ return rel.split("/").map(encodeURIComponent).join("/"); }
+function iPath(rel){ return `/drives/${FOLDER.driveId}/items/${FOLDER.id}` + (rel?`:/${encPath(rel)}:`:""); }
+
+async function resolveFolder(){
+  const j = await gjson(`/me/drive/root/children?$select=id,name,folder,remoteItem,parentReference&$top=999`);
+  const hit = (j.value||[]).find(x=>x.name===cfg.folder);
+  if(!hit){
+    throw new Error(`A pasta “${cfg.folder}” não foi encontrada no seu OneDrive. Se ela foi compartilhada com você, abra o OneDrive, clique com o botão direito na pasta compartilhada e escolha “Adicionar atalho a Meus arquivos”.`);
+  }
+  FOLDER = hit.remoteItem
+    ? { driveId: hit.remoteItem.parentReference.driveId, id: hit.remoteItem.id }
+    : { driveId: hit.parentReference.driveId, id: hit.id };
+}
+async function loadDB(){
+  const meta = await gjson(iPath("dados.json")+"?$select=eTag,id,@microsoft.graph.downloadUrl");
+  dbEtag = meta.eTag;
+  const r = await fetch(meta["@microsoft.graph.downloadUrl"]);
+  rawSnapshot = await r.text();
+  DB = JSON.parse(rawSnapshot);
+}
+async function saveDB(){
+  busy(true);
+  try{
+    // backup diário (guarda o estado ANTES da primeira alteração do dia)
+    const today = new Date().toISOString().slice(0,10);
+    if(localStorage.getItem("rh_lastbk")!==today && rawSnapshot){
+      try{ await gfetch(iPath(`Backup/dados_${today}.json`)+"/content", {method:"PUT", headers:{"Content-Type":"application/json"}, body:rawSnapshot}); localStorage.setItem("rh_lastbk",today); }catch(e){ console.warn("backup falhou",e); }
+    }
+    DB.meta.atualizadoEm = new Date().toISOString();
+    DB.meta.atualizadoPor = account?.name || account?.username || "";
+    const body = JSON.stringify(DB, null, 2);
+    const r = await gfetch(iPath("dados.json")+"/content", {method:"PUT", headers:{"Content-Type":"application/json","If-Match":dbEtag}, body});
+    if(r.status===412){
+      toast("⚠️ Outra pessoa salvou alterações. Recarregando…");
+      await loadDB(); render();
+      return false;
+    }
+    if(!r.ok) throw new Error("Falha ao salvar ("+r.status+")");
+    const j = await r.json(); dbEtag = j.eTag; rawSnapshot = body;
+    return true;
+  }catch(e){ toast("❌ "+(e.message||"Erro ao salvar")); return false; }
+  finally{ busy(false); }
+}
+async function uploadFile(rel, blob, mime){
+  if(blob.size < 3800000){
+    const r = await gfetch(iPath(rel)+"/content", {method:"PUT", headers:{"Content-Type":mime||"application/octet-stream"}, body:blob});
+    if(!r.ok) throw new Error("Upload falhou ("+r.status+")");
+    return r.json();
+  }
+  const s = await gjson(iPath(rel)+"/createUploadSession", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({item:{"@microsoft.graph.conflictBehavior":"rename"}})});
+  const CH = 5*1024*1024; let pos = 0, last=null;
+  while(pos < blob.size){
+    const end = Math.min(pos+CH, blob.size);
+    const r = await fetch(s.uploadUrl, {method:"PUT", headers:{"Content-Range":`bytes ${pos}-${end-1}/${blob.size}`}, body: blob.slice(pos,end)});
+    if(!r.ok && r.status!==202) throw new Error("Upload falhou ("+r.status+")");
+    last = r; pos = end;
+  }
+  return last.json();
+}
+async function fileUrl(rel){
+  if(urlCache.has(rel)) return urlCache.get(rel);
+  const j = await gjson(iPath(rel)+"?$select=webUrl");
+  urlCache.set(rel, j.webUrl); return j.webUrl;
+}
+async function thumbUrl(rel){
+  if(thumbCache.has(rel)) return thumbCache.get(rel);
+  const p = (async()=>{
+    try{ const j = await gjson(iPath(rel)+"/thumbnails?$select=medium"); return j.value?.[0]?.medium?.url||null; }
+    catch(e){ return null; }
+  })();
+  thumbCache.set(rel, p); return p;
+}
+/* ---------------- utilidades ---------------- */
+function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function nv(s){ return (s===null||s===undefined||s==="")?"—":esc(s); }
+function fmtDate(iso){ if(!iso) return "—"; const [y,m,d]=String(iso).slice(0,10).split("-"); return (d&&m&&y)?`${d}/${m}/${y}`:esc(iso); }
+function money(v){ return (v===null||v===undefined)?"—":Number(v).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
+function initials(n){ return String(n||"?").trim().split(/\s+/).filter(Boolean).map(x=>x[0]).filter((_,i,a)=>i===0||i===a.length-1).join("").toUpperCase(); }
+function idade(nasc){ if(!nasc) return null; const n=new Date(nasc+"T12:00"), h=new Date(); let a=h.getFullYear()-n.getFullYear(); const m=h.getMonth()-n.getMonth(); if(m<0||(m===0&&h.getDate()<n.getDate()))a--; return a; }
+function tempoEmpresa(adm, dem){
+  if(!adm) return null;
+  const a=new Date(adm+"T12:00"), b=dem?new Date(dem+"T12:00"):new Date();
+  let y=b.getFullYear()-a.getFullYear(), m=b.getMonth()-a.getMonth();
+  if(b.getDate()<a.getDate()) m--;
+  if(m<0){y--;m+=12}
+  if(y<0) return null;
+  const p=[]; if(y)p.push(y+(y>1?" anos":" ano")); if(m)p.push(m+(m>1?" meses":" mês"));
+  return p.length?p.join(" e "):"menos de 1 mês";
+}
+const STATUS_CLR = {"Ativo":"b-ok","Demitido":"b-bad","Pediu Demissão":"b-warn","Candidato":"b-info","Não Contratado":"b-gray"};
+const STATUS_OPTS = ["Ativo","Candidato","Demitido","Pediu Demissão","Não Contratado"];
+function sBadge(st){ return `<span class="badge ${STATUS_CLR[st]||"b-gray"}">${esc(st||"—")}</span>`; }
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("on"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("on"),3200); }
+function busy(on){ document.getElementById("busy").classList.toggle("on",!!on); }
+function uid(){ return Math.random().toString(16).slice(2,10); }
+function nextFunId(){ const mx = DB.funcionarios.reduce((m,f)=>{const n=+String(f.id).replace(/\D/g,"");return n>m?n:m;},0); return "FUN"+String(mx+1).padStart(4,"0"); }
+function safeName(s){ return String(s||"").replace(/[<>:"/\\|?*]/g,"").replace(/\s+/g," ").trim(); }
+function getF(id){ return DB.funcionarios.find(f=>f.id===id); }
+function getProj(id){ return DB.projetos.find(p=>p.id===id); }
+function getCli(id){ return DB.clientes.find(c=>c.id===id); }
+function salarioDe(f){ const c=DB.cargos.find(c=>c.cargo===f.cargo && String(c.nivel||"")===String(f.nivel||"")); return c?c.salario:null; }
+function docStatus(d){
+  if(!d.validade) return "";
+  const dias = Math.floor((new Date(d.validade+"T12:00") - new Date())/86400000);
+  if(dias<0) return `<span class="badge b-bad">vencido</span>`;
+  if(dias<=30) return `<span class="badge b-warn">vence em ${dias}d</span>`;
+  return `<span class="badge b-ok">válido</span>`;
+}
+async function hydrateAvatars(){
+  document.querySelectorAll("[data-foto]").forEach(async el=>{
+    const rel = el.getAttribute("data-foto"); if(!rel) return;
+    const f = getF(el.getAttribute("data-fid"));
+    const u = await thumbUrl(`Funcionarios/${f.pasta}/${rel}`);
+    if(u){ el.style.backgroundImage=`url("${u}")`; el.textContent=""; }
+  });
+}
+function avatarHtml(f, cls){
+  return `<div class="av ${cls}" data-fid="${f.id}" ${f.foto?`data-foto="${esc(f.foto)}"`:""}>${initials(f.nome)}</div>`;
+}
+
+/* ---------------- navegação / render ---------------- */
+const S = { view:"dash", fichaId:null, tab:"pessoal", filtro:"Ativo", busca:"", projOpen:null };
+const NAV = [
+  {v:"dash",  l:"Início",       ic:"home"},
+  {v:"func",  l:"Funcionários", ic:"team"},
+  {v:"proj",  l:"Projetos",     ic:"proj"},
+  {v:"cargos",l:"Cargos",       ic:"cash"},
+  {v:"mais",  l:"Mais",         ic:"more"},
+];
+function startApp(){
+  document.getElementById("gate").classList.add("hide");
+  document.getElementById("shell").classList.add("on");
+  document.getElementById("uname").textContent = account.name || account.username;
+  document.getElementById("uav").textContent = initials(account.name || account.username);
+  render();
+}
+function go(v){ S.view=v; if(v!=="ficha") S.fichaId=null; render(); window.scrollTo(0,0); }
+function render(){
+  const navHtml = on => NAV.map(n=>`<button class="${S.view===n.v||(S.view==="ficha"&&n.v==="func")?"on":""}" onclick="go('${n.v}')">${ICONS[n.ic]}${on?"":"<span>"}${n.l}${on?"":"</span>"}</button>`).join("");
+  document.getElementById("snav").innerHTML = navHtml(true);
+  document.getElementById("bnav").innerHTML = NAV.map(n=>`<button class="${S.view===n.v||(S.view==="ficha"&&n.v==="func")?"on":""}" onclick="go('${n.v}')">${ICONS[n.ic]}${n.l}</button>`).join("");
+  const M = document.getElementById("main");
+  const top = `<div class="mtop"><div class="mark">RH</div><div><b>Recursos Humanos</b><small>Livion Solutions</small></div></div>`;
+  let html = "";
+  if(S.view==="dash") html = vDash();
+  else if(S.view==="func") html = vFunc();
+  else if(S.view==="ficha") html = vFicha();
+  else if(S.view==="proj") html = vProj();
+  else if(S.view==="cargos") html = vCargos();
+  else if(S.view==="mais") html = vMais();
+  M.innerHTML = top + html;
+  hydrateAvatars();
+}
+
+/* ---------------- telas ---------------- */
+function vDash(){
+  const ativos = DB.funcionarios.filter(f=>f.status==="Ativo");
+  const candidatos = DB.funcionarios.filter(f=>f.status==="Candidato");
+  const emProj = new Set();
+  ativos.forEach(f=>f.projetos.forEach(p=>{ if(!p.fim) emProj.add(f.id); }));
+  const alerts = [];
+  DB.funcionarios.forEach(f=>f.documentos.forEach(d=>{
+    if(!d.validade) return;
+    const dias = Math.floor((new Date(d.validade+"T12:00")-new Date())/86400000);
+    if(dias<=30) alerts.push({f, d, dias});
+  }));
+  alerts.sort((a,b)=>a.dias-b.dias);
+  const mes = new Date().getMonth()+1;
+  const nivers = ativos.filter(f=>f.pessoal.nascimento && +f.pessoal.nascimento.slice(5,7)===mes)
+    .sort((a,b)=>a.pessoal.nascimento.slice(8,10)-b.pessoal.nascimento.slice(8,10));
+  const porCargo = {};
+  ativos.forEach(f=>{ const c=f.cargo||"Sem cargo"; porCargo[c]=(porCargo[c]||0)+1; });
+  const distr = Object.entries(porCargo).sort((a,b)=>b[1]-a[1]);
+  const mx = distr[0]?.[1]||1;
+  return `
+  <div class="h1">Olá, ${esc((account.name||"").split(" ")[0])} 👋</div>
+  <div class="sub">Resumo de hoje, ${new Date().toLocaleDateString("pt-BR",{day:"numeric",month:"long"})}</div>
+  <div class="stats">
+    <div class="stat accent" onclick="S.filtro='Ativo';go('func')"><div class="n">${ativos.length}</div><div class="l">Funcionários ativos</div></div>
+    <div class="stat" onclick="go('proj')"><div class="n">${emProj.size}</div><div class="l">Alocados em projetos</div></div>
+    <div class="stat" onclick="S.filtro='Candidato';go('func')"><div class="n">${candidatos.length}</div><div class="l">Candidatos</div></div>
+    <div class="stat" style="${alerts.length?'outline:2px solid var(--warn)':''}"><div class="n" style="${alerts.length?'color:var(--warn)':''}">${alerts.length}</div><div class="l">Documentos a vencer</div></div>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+    ${alerts.length?`<div class="card"><div class="secttl"><h3>⚠️ Documentos vencendo</h3></div>
+      ${alerts.map(a=>`<div class="rowitem" style="cursor:pointer" onclick="A.abrirFicha('${a.f.id}','docs')"><div class="inf"><b>${esc(a.f.nome)}</b><span>${esc(a.d.tipo||"Documento")} · validade ${fmtDate(a.d.validade)}</span></div>${a.dias<0?'<span class="badge b-bad">vencido</span>':`<span class="badge b-warn">${a.dias}d</span>`}</div>`).join("")}</div>`:""}
+    <div class="card"><div class="secttl"><h3>🎂 Aniversariantes do mês</h3></div>
+      ${nivers.length?nivers.map(f=>`<div class="rowitem" style="cursor:pointer" onclick="A.abrirFicha('${f.id}')">${avatarHtml(f,"md")}<div class="inf"><b>${esc(f.nome)}</b><span>dia ${+f.pessoal.nascimento.slice(8,10)} · ${new Date().getFullYear()-+f.pessoal.nascimento.slice(0,4)} anos</span></div></div>`).join(""):`<div class="empty">Nenhum aniversário este mês</div>`}</div>
+    <div class="card"><div class="secttl"><h3>👥 Equipe ativa por cargo</h3></div>
+      ${distr.map(([c,n])=>`<div class="distrow"><span class="lb">${esc(c)}</span><div class="bar"><i style="width:${Math.round(n/mx*100)}%"></i></div><span class="vl">${n}</span></div>`).join("")||`<div class="empty">Sem dados</div>`}</div>
+  </div>`;
+}
+
+function vFunc(){
+  const chips = ["Ativo","Todos","Candidato","Demitido","Pediu Demissão"];
+  const q = S.busca.toLowerCase();
+  let list = DB.funcionarios.filter(f=> S.filtro==="Todos" || f.status===S.filtro);
+  if(q) list = DB.funcionarios.filter(f => (f.nome+" "+(f.cargo||"")+" "+(f.empresa||"")+" "+f.id).toLowerCase().includes(q));
+  return `
+  <div class="h1">Funcionários</div>
+  <div class="sub">${list.length} pessoa${list.length!==1?"s":""} ${q?`para “${esc(S.busca)}”`:S.filtro==="Todos"?"no total":`· ${esc(S.filtro)}`}</div>
+  <div class="search">${ICONS.search}<input placeholder="Buscar por nome, cargo, empresa…" value="${esc(S.busca)}" oninput="A.buscar(this.value)"></div>
+  <div class="chips">${chips.map(c=>`<button class="chip ${S.filtro===c&&!q?"on":""}" onclick="A.filtrar('${c}')">${c==="Todos"||c==="Pediu Demissão"?c:c+"s"}</button>`).join("")}</div>
+  <div class="plist">
+    ${list.map(f=>`<div class="pcard" onclick="A.abrirFicha('${f.id}')">${avatarHtml(f,"md")}
+      <div class="inf"><b>${esc(f.nome)}</b><span>${esc(f.cargo||"—")}${f.nivel?` · Nível ${esc(f.nivel)}`:""}</span><span>${esc(f.empresa||"")}</span></div>
+      ${sBadge(f.status)}</div>`).join("") || `<div class="empty card">Ninguém encontrado</div>`}
+  </div>
+  <button class="fab" onclick="A.novoFunc()">${ICONS.plus} Novo</button>`;
+}
+
+function vFicha(){
+  const f = getF(S.fichaId);
+  if(!f) return `<div class="empty card">Funcionário não encontrado</div>`;
+  const sal = salarioDe(f);
+  const tabs = [["pessoal","Pessoal"],["banco","Bancário"],["docs",`Documentos${f.documentos.length?` (${f.documentos.length})`:""}`],["proj","Projetos"],["notas","Anotações"]];
+  let body = "";
+  if(S.tab==="pessoal"){
+    const p = f.pessoal;
+    const its = [["Telefone pessoal",p.telefonePessoal],["Telefone profissional",p.telefoneProfissional],["E-mail pessoal",p.emailPessoal],["E-mail profissional",p.emailProfissional],["Endereço",p.endereco],["Nascimento",p.nascimento?`${fmtDate(p.nascimento)} (${idade(p.nascimento)} anos)`:null],["CPF",p.cpf],["RG",p.rg],["Estado civil",p.estadoCivil],["Filhos",p.filhos],["Idades dos filhos",p.idadesFilhos],["Emergência — nome",p.emergenciaNome],["Emergência — telefone",p.emergenciaTelefone],["Emergência — parentesco",p.emergenciaParentesco],["Doenças?",p.doencas],["Qual doença",p.qualDoenca],["Usa medicamentos?",p.medicamentos],["Quais medicamentos",p.quaisMedicamentos],["Alergias",p.alergias],["Tipos de alergias",p.tiposAlergias],["Tipo sanguíneo",p.tipoSanguineo],["Observações",p.observacoes]];
+    body = `<div class="card"><div class="secttl"><h3>Dados pessoais</h3><button class="btn sec sm" onclick="A.editPessoal('${f.id}')">${ICONS.edit} Editar</button></div>
+      <div class="dl">${its.map(([l,v])=>`<div class="it"><small>${l}</small><span>${nv(v)}</span></div>`).join("")}</div></div>`;
+  }
+  if(S.tab==="banco"){
+    body = `<div class="card"><div class="secttl"><h3>Contas bancárias e PIX</h3><button class="btn sec sm" onclick="A.editBanco('${f.id}',-1)">${ICONS.plus} Adicionar</button></div>
+      ${f.bancos.length?f.bancos.map((b,i)=>`<div class="rowitem"><div class="inf"><b>${esc(b.banco||"Banco")}</b>
+        <span>Ag. ${nv(b.agencia)} · Conta ${nv(b.conta)}</span>
+        ${b.chavePix?`<span>PIX ${esc(b.tipoPix||"")}: <b style="font-size:.8rem">${esc(b.chavePix)}</b></span>`:""}
+        ${b.observacoes?`<span>${esc(b.observacoes)}</span>`:""}</div>
+        <button class="iconbtn" onclick="A.editBanco('${f.id}',${i})">${ICONS.edit}</button>
+        <button class="iconbtn" onclick="A.delBanco('${f.id}',${i})">${ICONS.del}</button></div>`).join(""):`<div class="empty">Nenhuma conta cadastrada</div>`}</div>`;
+  }
+  if(S.tab==="docs"){
+    body = `<div class="card"><div class="secttl"><h3>Documentos</h3><button class="btn sec sm" onclick="A.editDoc('${f.id}',-1)">${ICONS.plus} Adicionar</button></div>
+      ${f.documentos.length?f.documentos.map((d,i)=>`<div class="rowitem"><div class="inf"><b>${esc(d.tipo||"Documento")}</b>
+        <span>Emissão ${fmtDate(d.emissao)}${d.validade?` · Validade ${fmtDate(d.validade)}`:""}</span>
+        ${d.observacoes?`<span>${esc(d.observacoes)}</span>`:""}</div>
+        ${docStatus(d)}
+        ${d.arquivo?`<button class="iconbtn" title="Abrir arquivo" onclick="A.abrirArq('${f.id}','${esc(d.arquivo)}')">${ICONS.open}</button>`:""}
+        <button class="iconbtn" onclick="A.editDoc('${f.id}',${i})">${ICONS.edit}</button>
+        <button class="iconbtn" onclick="A.delDoc('${f.id}',${i})">${ICONS.del}</button></div>`).join(""):`<div class="empty">Nenhum documento — adicione RG, CTPS, ASO, contratos…</div>`}</div>
+      <div class="card" style="margin-top:12px"><div class="secttl"><h3>Currículo</h3>
+        <div style="display:flex;gap:8px">${f.curriculo?`<button class="btn sec sm" onclick="A.abrirArq('${f.id}','${esc(f.curriculo)}')">${ICONS.open} Abrir</button>`:""}
+        <button class="btn ghost sm" onclick="A.upCurriculo('${f.id}')">${ICONS.doc} ${f.curriculo?"Substituir":"Enviar"}</button></div></div>
+        ${f.curriculo?"":`<div class="empty">Nenhum currículo anexado</div>`}</div>`;
+  }
+  if(S.tab==="proj"){
+    body = `<div class="card"><div class="secttl"><h3>Alocação em projetos</h3><button class="btn sec sm" onclick="A.editAloc('${f.id}',-1)">${ICONS.plus} Alocar</button></div>
+      ${f.projetos.length?f.projetos.map((a,i)=>{const pj=getProj(a.projetoId);const cl=pj?getCli(pj.clienteId):null;
+        return `<div class="rowitem"><div class="inf"><b>${esc(pj?.nome||"Projeto removido")}</b>
+        <span>${cl?esc(cl.nome)+" · ":""}${esc(a.funcao||a.cargo||"")}</span>
+        <span>${a.inicio?fmtDate(a.inicio):"—"} → ${a.fim?fmtDate(a.fim):"atual"}</span></div>
+        ${a.fim?'<span class="badge b-gray">encerrado</span>':'<span class="badge b-ok">ativo</span>'}
+        <button class="iconbtn" onclick="A.editAloc('${f.id}',${i})">${ICONS.edit}</button>
+        <button class="iconbtn" onclick="A.delAloc('${f.id}',${i})">${ICONS.del}</button></div>`;}).join(""):`<div class="empty">Não alocado em nenhum projeto</div>`}</div>`;
+  }
+  if(S.tab==="notas"){
+    const its=[["Avaliação",f.avaliacao],["Observação da avaliação",f.obsAvaliacao],["Motivos / observações complementares",f.motivosObs],["Observações gerais",f.observacoes]];
+    body = `<div class="card"><div class="secttl"><h3>Anotações e avaliação</h3><button class="btn sec sm" onclick="A.editNotas('${f.id}')">${ICONS.edit} Editar</button></div>
+      <div class="dl" style="grid-template-columns:1fr">${its.map(([l,v])=>`<div class="it"><small>${l}</small><span>${nv(v)}</span></div>`).join("")}</div></div>`;
+  }
+  return `
+  <button class="btn ghost sm" style="margin-bottom:14px" onclick="go('func')">${ICONS.back} Funcionários</button>
+  <div class="card">
+    <div class="fichahead">
+      <div class="avwrap">${avatarHtml(f,"big")}<button class="cam" title="Alterar foto" onclick="A.trocarFoto('${f.id}')">${ICONS.cam}</button></div>
+      <div class="who">
+        <h2>${esc(f.nome)}</h2>
+        <div class="role">${esc(f.cargo||"Sem cargo")}${f.nivel?` · Nível ${esc(f.nivel)}`:""} · ${esc(f.empresa||"—")}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${sBadge(f.status)}
+          ${f.linkedin?`<a class="badge b-info" href="${esc(f.linkedin)}" target="_blank">LinkedIn ↗</a>`:""}
+          <span class="badge b-gray">${f.id}</span></div>
+      </div>
+      <button class="btn sec sm" onclick="A.editDados('${f.id}')">${ICONS.edit} Editar</button>
+    </div>
+    <div class="quick">
+      <div class="q"><small>Admissão</small><b>${fmtDate(f.dataAdmissao)}</b></div>
+      <div class="q"><small>Tempo de empresa</small><b>${tempoEmpresa(f.dataAdmissao,f.dataDemissao)||"—"}</b></div>
+      ${f.dataDemissao?`<div class="q"><small>Desligamento</small><b>${fmtDate(f.dataDemissao)}</b></div>`:""}
+      <div class="q"><small>Salário (tabela)</small><b>${money(sal)}</b></div>
+    </div>
+  </div>
+  <div class="tabs">${tabs.map(([k,l])=>`<button class="${S.tab===k?"on":""}" onclick="A.tab('${k}')">${l}</button>`).join("")}</div>
+  ${body}`;
+}
+function vProj(){
+  return `
+  <div class="h1">Projetos & Clientes</div>
+  <div class="sub">${DB.projetos.length} projetos · ${DB.clientes.length} clientes</div>
+  <div class="secttl"><h3>Projetos</h3><button class="btn sec sm" onclick="A.editProj(-1)">${ICONS.plus} Novo projeto</button></div>
+  <div class="grid" style="margin-bottom:22px">
+    ${DB.projetos.map(p=>{
+      const cl=getCli(p.clienteId);
+      const equipe = DB.funcionarios.flatMap(f=>f.projetos.filter(a=>a.projetoId===p.id&&!a.fim).map(a=>({f,a})));
+      const open = S.projOpen===p.id;
+      return `<div class="card">
+        <div style="display:flex;align-items:center;gap:12px;cursor:pointer" onclick="A.toggleProj('${p.id}')">
+          <div style="flex:1;min-width:0"><b>${esc(p.nome)}</b>
+          <div style="color:var(--mut);font-size:.8rem;margin-top:2px">${esc(cl?.nome||"Sem cliente")}${p.inicio?` · desde ${fmtDate(p.inicio)}`:""}</div></div>
+          <span class="badge ${p.status==="Em andamento"?"b-ok":p.status==="Concluído"?"b-gray":"b-info"}">${esc(p.status||"—")}</span>
+          <span class="badge b-info">${equipe.length} 👤</span>
+          <button class="iconbtn" onclick="event.stopPropagation();A.editProj('${p.id}')">${ICONS.edit}</button>
+        </div>
+        ${open?`<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:6px">
+          ${p.descricao?`<div style="font-size:.85rem;color:var(--mut);padding:6px 0">${esc(p.descricao)}</div>`:""}
+          ${equipe.length?equipe.map(({f,a})=>`<div class="rowitem" style="cursor:pointer" onclick="A.abrirFicha('${f.id}','proj')">${avatarHtml(f,"md")}<div class="inf"><b>${esc(f.nome)}</b><span>${esc(a.funcao||a.cargo||f.cargo||"")}</span></div></div>`).join(""):`<div class="empty">Ninguém alocado</div>`}
+          <button class="btn ghost sm" style="margin-top:8px" onclick="A.alocarNoProj('${p.id}')">${ICONS.plus} Alocar funcionário</button>
+        </div>`:""}
+      </div>`;}).join("") || `<div class="empty card">Nenhum projeto</div>`}
+  </div>
+  <div class="secttl"><h3>Clientes</h3><button class="btn sec sm" onclick="A.editCli(-1)">${ICONS.plus} Novo cliente</button></div>
+  <div class="grid">
+    ${DB.clientes.map(c=>{
+      const n = DB.projetos.filter(p=>p.clienteId===c.id).length;
+      return `<div class="card" style="display:flex;align-items:center;gap:12px">
+        <div class="av md" style="border-radius:12px">${initials(c.nome)}</div>
+        <div style="flex:1;min-width:0"><b>${esc(c.nome)}</b>
+        <div style="color:var(--mut);font-size:.8rem">${esc(c.empresaContratada||"")}${c.contato?` · ${esc(c.contato)}`:""}${c.telefone?` · ${esc(c.telefone)}`:""}</div></div>
+        <span class="badge b-gray">${n} projeto${n!==1?"s":""}</span>
+        <button class="iconbtn" onclick="A.editCli('${c.id}')">${ICONS.edit}</button></div>`;}).join("") || `<div class="empty card">Nenhum cliente</div>`}
+  </div>`;
+}
+
+function vCargos(){
+  const grupos = {};
+  DB.cargos.forEach(c=>{ (grupos[c.cargo]=grupos[c.cargo]||[]).push(c); });
+  Object.values(grupos).forEach(g=>g.sort((a,b)=>String(a.nivel).localeCompare(String(b.nivel),undefined,{numeric:true})));
+  return `
+  <div class="h1">Cargos & Salários</div>
+  <div class="sub">Tabela salarial por cargo e nível</div>
+  ${DB.regrasSalario.length?`<div class="card" style="margin-bottom:14px"><div class="secttl"><h3>Regras de referência</h3><button class="btn sec sm" onclick="A.editRegra(-1)">${ICONS.plus}</button></div>
+    ${DB.regrasSalario.map((r,i)=>`<div class="rowitem"><div class="inf"><b>${esc(r.descricao)}</b><span>${r.observacao?esc(r.observacao):""}</span></div><b>${money(r.salario)}</b>
+    <button class="iconbtn" onclick="A.editRegra(${i})">${ICONS.edit}</button></div>`).join("")}</div>`:""}
+  <div class="card" style="overflow-x:auto">
+    <div class="secttl"><h3>Cargos</h3><button class="btn sec sm" onclick="A.editCargo(-1)">${ICONS.plus} Novo nível</button></div>
+    <table class="tbl"><thead><tr><th>Cargo</th><th>Nível</th><th>Salário</th><th>% aumento</th><th>Carga</th><th></th></tr></thead><tbody>
+    ${Object.entries(grupos).sort().map(([nome,nvs])=>nvs.map((c,i)=>{
+      const idx = DB.cargos.indexOf(c);
+      const nAtivos = i===0 ? DB.funcionarios.filter(f=>f.status==="Ativo"&&f.cargo===nome).length : null;
+      return `<tr>${i===0?`<td rowspan="${nvs.length}" style="font-weight:700">${esc(nome)}${nAtivos?`<div style="margin-top:3px"><span class="badge b-info">${nAtivos} ativo${nAtivos>1?"s":""}</span></div>`:""}</td>`:""}
+      <td>${nv(c.nivel)}</td><td style="font-weight:700">${money(c.salario)}</td>
+      <td>${c.aumento?Math.round(c.aumento*100)+"%":"—"}</td><td>${nv(c.cargaHoraria)}</td>
+      <td><button class="iconbtn" onclick="A.editCargo(${idx})">${ICONS.edit}</button></td></tr>`;
+    }).join("")).join("")}</tbody></table>
+  </div>`;
+}
+
+function vMais(){
+  const cfgLink = location.origin+location.pathname+`?cid=${encodeURIComponent(cfg.cid)}&tid=${encodeURIComponent(cfg.tid)}&folder=${encodeURIComponent(cfg.folder)}`;
+  return `
+  <div class="h1">Mais opções</div>
+  <div class="sub">Ferramentas e configurações</div>
+  <div class="grid">
+    <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.exportar()">${ICONS.xls}<div class="inf"><b>Exportar Excel</b><span>Baixa uma planilha com todos os dados</span></div></div>
+    <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.abrirPasta()">${ICONS.cloud}<div class="inf"><b>Abrir pasta no OneDrive</b><span>Ver arquivos, fotos e backups</span></div></div>
+    <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.copiarLink('${esc(cfgLink)}')">${ICONS.link}<div class="inf"><b>Link de configuração rápida</b><span>Copie e abra no celular para configurar automaticamente</span></div></div>
+    <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.recarregar()">${ICONS.gear}<div class="inf"><b>Recarregar dados</b><span>Busca a versão mais recente do OneDrive</span></div></div>
+    <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.reconfig()">${ICONS.gear}<div class="inf"><b>Configuração</b><span>Alterar IDs do aplicativo ou pasta</span></div></div>
+    <div class="card rowitem" style="cursor:pointer;border-bottom:none;color:var(--bad)" onclick="A.sair()">${ICONS.back}<div class="inf"><b>Sair</b><span style="color:var(--mut)">Desconectar conta Microsoft</span></div></div>
+  </div>
+  <div class="sub" style="margin-top:16px;text-align:center">Última alteração: ${DB.meta.atualizadoEm?new Date(DB.meta.atualizadoEm).toLocaleString("pt-BR"):"—"}${DB.meta.atualizadoPor?` por ${esc(DB.meta.atualizadoPor)}`:""}</div>`;
+}
+
+/* ---------------- modal de formulário genérico ---------------- */
+function openForm(title, fields, values, onSave){
+  const ov = document.createElement("div"); ov.className="overlay";
+  ov.innerHTML = `<div class="modal"><h3>${esc(title)}</h3><div class="fgrid">
+    ${fields.map(f=>{
+      const v = values[f.k] ?? "";
+      let inp = "";
+      if(f.type==="select") inp = `<select id="ff_${f.k}">${(f.opts||[]).map(o=>{const[val,lab]=Array.isArray(o)?o:[o,o];return `<option value="${esc(val)}" ${String(v)===String(val)?"selected":""}>${esc(lab)}</option>`;}).join("")}</select>`;
+      else if(f.type==="textarea") inp = `<textarea id="ff_${f.k}">${esc(v)}</textarea>`;
+      else if(f.type==="file") inp = `<input type="file" id="ff_${f.k}" ${f.accept?`accept="${f.accept}"`:""}>`;
+      else inp = `<input type="${f.type||"text"}" id="ff_${f.k}" value="${esc(v)}" ${f.ph?`placeholder="${esc(f.ph)}"`:""}>`;
+      return `<div class="fld ${f.full||f.type==="textarea"?"full":""}"><label>${esc(f.label)}${f.req?" *":""}</label>${inp}</div>`;
+    }).join("")}
+  </div><div class="acts"><button class="btn ghost" data-x>Cancelar</button><button class="btn" data-ok>Salvar</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener("click", e=>{ if(e.target===ov) ov.remove(); });
+  ov.querySelector("[data-x]").onclick = ()=>ov.remove();
+  ov.querySelector("[data-ok]").onclick = async ()=>{
+    const out = {};
+    for(const f of fields){
+      const el = ov.querySelector("#ff_"+f.k);
+      out[f.k] = f.type==="file" ? (el.files[0]||null) : (el.value.trim()||null);
+      if(f.req && !out[f.k]){ toast("Preencha: "+f.label); return; }
+    }
+    ov.querySelector("[data-ok]").disabled = true;
+    const ok = await onSave(out);
+    if(ok!==false){ ov.remove(); render(); }
+    else ov.querySelector("[data-ok]").disabled = false;
+  };
+}
+function confirmar(msg, fn){
+  const ov = document.createElement("div"); ov.className="overlay";
+  ov.innerHTML = `<div class="modal"><h3>Confirmar</h3><p style="color:var(--mut);font-size:.92rem">${esc(msg)}</p>
+  <div class="acts"><button class="btn ghost" data-x>Cancelar</button><button class="btn danger" data-ok>Excluir</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener("click", e=>{ if(e.target===ov) ov.remove(); });
+  ov.querySelector("[data-x]").onclick = ()=>ov.remove();
+  ov.querySelector("[data-ok]").onclick = async ()=>{ ov.remove(); await fn(); render(); };
+}
+/* ---------------- ações ---------------- */
+const A = {};
+A.salvarSetup = ()=>{
+  const cid = document.getElementById("s_cid").value.trim();
+  const tid = document.getElementById("s_tid").value.trim() || "organizations";
+  const folder = document.getElementById("s_folder").value.trim() || DEFAULT_FOLDER;
+  if(!cid){ toast("Informe o ID do aplicativo"); return; }
+  localStorage.setItem("rh_cfg", JSON.stringify({cid,tid,folder}));
+  location.reload();
+};
+A.entrar = ()=> msalApp.loginRedirect({scopes:SCOPES});
+A.sair = ()=> confirmar("Deseja sair da conta Microsoft neste dispositivo?", ()=> msalApp.logoutRedirect());
+A.reconfig = ()=>{ cfg = JSON.parse(localStorage.getItem("rh_cfg")||"null"); showSetup(); };
+A.recarregar = async ()=>{ busy(true); try{ thumbCache.clear(); urlCache.clear(); await loadDB(); render(); toast("✅ Dados atualizados"); }catch(e){ toast("❌ "+e.message); } busy(false); };
+A.copiarLink = async (l)=>{ try{ await navigator.clipboard.writeText(l); toast("✅ Link copiado! Abra no outro dispositivo."); }catch(e){ prompt("Copie o link:", l); } };
+A.abrirPasta = async ()=>{ busy(true); try{ const j = await gjson(iPath("")+"?$select=webUrl"); window.open(j.webUrl,"_blank"); }catch(e){ toast("❌ "+e.message); } busy(false); };
+A.tab = t=>{ S.tab=t; render(); };
+A.abrirFicha = (id, tab)=>{ S.fichaId=id; S.tab=tab||"pessoal"; S.view="ficha"; render(); window.scrollTo(0,0); };
+A.buscar = v=>{ S.busca=v; const l=document.activeElement; render(); const inp=document.querySelector(".search input"); if(inp){inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length);} };
+A.filtrar = c=>{ S.filtro=c; S.busca=""; render(); };
+A.toggleProj = id=>{ S.projOpen = S.projOpen===id?null:id; render(); };
+A.abrirArq = async (fid, rel)=>{ busy(true); try{ const f=getF(fid); const u = await fileUrl(`Funcionarios/${f.pasta}/${rel}`); window.open(u,"_blank"); }catch(e){ toast("❌ Arquivo não encontrado no OneDrive"); } busy(false); };
+
+/* --- funcionário: dados --- */
+const cargosOpts = ()=> [...new Set(DB.cargos.map(c=>c.cargo))].sort().map(c=>[c,c]);
+const empresaOpts = ()=> [...new Set(DB.funcionarios.map(f=>f.empresa).filter(Boolean))].sort().map(e=>[e,e]);
+const fDados = f => [
+  {k:"nome", label:"Nome completo", req:1, full:1},
+  {k:"status", label:"Status", type:"select", opts:STATUS_OPTS},
+  {k:"empresa", label:"Empresa contratante", type:"select", opts:[["",""],...empresaOpts()]},
+  {k:"cargo", label:"Cargo", type:"select", opts:[["",""],...cargosOpts()]},
+  {k:"nivel", label:"Nível", type:"select", opts:[["",""],...Array.from({length:9},(_,i)=>[String(i+1),String(i+1)])]},
+  {k:"dataAdmissao", label:"Data de admissão", type:"date"},
+  {k:"dataDemissao", label:"Data de desligamento", type:"date"},
+  {k:"linkedin", label:"LinkedIn", full:1, ph:"https://linkedin.com/in/…"},
+];
+A.novoFunc = ()=> openForm("Novo funcionário", fDados({}), {status:"Ativo"}, async v=>{
+  const id = nextFunId();
+  const f = { id, nome:v.nome, pasta:`${id} - ${safeName(v.nome)}`, foto:null, curriculo:null,
+    status:v.status, empresa:v.empresa, cargo:v.cargo, nivel:v.nivel, linkedin:v.linkedin,
+    dataAdmissao:v.dataAdmissao, dataDemissao:v.dataDemissao, avaliacao:null, obsAvaliacao:null, motivosObs:null, observacoes:null,
+    pessoal:{}, bancos:[], documentos:[], projetos:[] };
+  DB.funcionarios.push(f);
+  DB.funcionarios.sort((a,b)=>a.nome.localeCompare(b.nome));
+  if(await saveDB()){ toast("✅ "+v.nome+" cadastrado"); A.abrirFicha(id); }
+});
+A.editDados = id=>{ const f=getF(id); openForm("Editar dados", fDados(f), f, async v=>{ Object.assign(f, v); if(await saveDB()) toast("✅ Salvo"); }); };
+A.editNotas = id=>{ const f=getF(id); openForm("Anotações e avaliação", [
+    {k:"avaliacao", label:"Avaliação", type:"textarea"},
+    {k:"obsAvaliacao", label:"Observação da avaliação", type:"textarea"},
+    {k:"motivosObs", label:"Motivos / obs. complementares", type:"textarea"},
+    {k:"observacoes", label:"Observações gerais", type:"textarea"},
+  ], f, async v=>{ Object.assign(f, v); if(await saveDB()) toast("✅ Salvo"); }); };
+A.editPessoal = id=>{ const f=getF(id); openForm("Dados pessoais", [
+    {k:"telefonePessoal", label:"Telefone pessoal", ph:"(11) 99999-9999"},
+    {k:"telefoneProfissional", label:"Telefone profissional"},
+    {k:"emailPessoal", label:"E-mail pessoal", type:"email"},
+    {k:"emailProfissional", label:"E-mail profissional", type:"email"},
+    {k:"endereco", label:"Endereço", full:1},
+    {k:"nascimento", label:"Data de nascimento", type:"date"},
+    {k:"cpf", label:"CPF"}, {k:"rg", label:"RG"},
+    {k:"estadoCivil", label:"Estado civil", type:"select", opts:[["",""],"Solteiro(a)","Casado(a)","União estável","Divorciado(a)","Viúvo(a)"]},
+    {k:"tipoSanguineo", label:"Tipo sanguíneo", type:"select", opts:[["",""],"A+","A-","B+","B-","AB+","AB-","O+","O-"]},
+    {k:"filhos", label:"Qtde. de filhos", type:"number"},
+    {k:"idadesFilhos", label:"Idades dos filhos"},
+    {k:"emergenciaNome", label:"Emergência — nome"},
+    {k:"emergenciaTelefone", label:"Emergência — telefone"},
+    {k:"emergenciaParentesco", label:"Emergência — parentesco"},
+    {k:"doencas", label:"Possui doenças?", type:"select", opts:[["",""],"Não","Sim"]},
+    {k:"qualDoenca", label:"Qual doença?"},
+    {k:"medicamentos", label:"Usa medicamentos?", type:"select", opts:[["",""],"Não","Sim"]},
+    {k:"quaisMedicamentos", label:"Quais medicamentos?"},
+    {k:"alergias", label:"Alergias?", type:"select", opts:[["",""],"Não","Sim"]},
+    {k:"tiposAlergias", label:"Tipos de alergias"},
+    {k:"observacoes", label:"Observações", type:"textarea"},
+  ], f.pessoal, async v=>{ Object.assign(f.pessoal, v); if(await saveDB()) toast("✅ Salvo"); }); };
+
+/* --- bancos --- */
+A.editBanco = (id,i)=>{ const f=getF(id); const b = i>=0?f.bancos[i]:{};
+  openForm(i>=0?"Editar conta":"Nova conta bancária", [
+    {k:"banco", label:"Banco", req:1, full:1, ph:"(341) Itaú Unibanco S.A."},
+    {k:"agencia", label:"Agência"}, {k:"conta", label:"Conta"},
+    {k:"tipoPix", label:"Tipo de PIX", type:"select", opts:[["",""],"CPF","CNPJ","E-mail","Telefone","Chave aleatória"]},
+    {k:"chavePix", label:"Chave PIX"},
+    {k:"observacoes", label:"Observações", type:"textarea"},
+  ], b, async v=>{ if(i>=0) Object.assign(f.bancos[i],v); else f.bancos.push(v); if(await saveDB()) toast("✅ Salvo"); }); };
+A.delBanco = (id,i)=> confirmar("Excluir esta conta bancária?", async ()=>{ getF(id).bancos.splice(i,1); await saveDB(); });
+
+/* --- documentos --- */
+const TIPOS_DOC = ["RG","CPF","Carteira de Trabalho","Comprovante de Endereço","Atestado de Saúde Ocupacional","Contrato de Trabalho","Contrato de Prestação de Serviços","Certificado / Curso","Exame","Atestado","Outro"];
+A.editDoc = (id,i)=>{ const f=getF(id); const d = i>=0?f.documentos[i]:{};
+  openForm(i>=0?"Editar documento":"Novo documento", [
+    {k:"tipo", label:"Tipo de documento", type:"select", opts:TIPOS_DOC.map(t=>[t,t]).concat(d.tipo&&!TIPOS_DOC.includes(d.tipo)?[[d.tipo,d.tipo]]:[]), full:1},
+    {k:"emissao", label:"Data de emissão", type:"date"},
+    {k:"validade", label:"Validade", type:"date"},
+    {k:"_file", label:i>=0&&d.arquivo?"Substituir arquivo (opcional)":"Arquivo (foto ou PDF)", type:"file", full:1, accept:"image/*,.pdf,.doc,.docx"},
+    {k:"observacoes", label:"Observações", type:"textarea"},
+  ], d, async v=>{
+    busy(true);
+    try{
+      let arquivo = d.arquivo||null;
+      if(v._file){
+        const ext = v._file.name.split(".").pop();
+        const fn = `${new Date().toISOString().slice(0,10)}_${safeName(v.tipo||"doc").replace(/\s+/g,"_")}_${uid().slice(0,4)}.${ext}`;
+        await uploadFile(`Funcionarios/${f.pasta}/Documentos/${fn}`, v._file, v._file.type);
+        arquivo = "Documentos/"+fn;
+      }
+      const rec = {id:d.id||uid(), tipo:v.tipo, emissao:v.emissao, validade:v.validade, arquivo, observacoes:v.observacoes};
+      if(i>=0) f.documentos[i]=rec; else f.documentos.push(rec);
+      if(await saveDB()) toast("✅ Documento salvo");
+    }catch(e){ toast("❌ "+e.message); busy(false); return false; }
+    busy(false);
+  }); };
+A.delDoc = (id,i)=> confirmar("Excluir este documento da lista? (o arquivo permanece na pasta do OneDrive)", async ()=>{ getF(id).documentos.splice(i,1); await saveDB(); });
+A.upCurriculo = id=>{
+  const f=getF(id); const inp=document.getElementById("fileGen");
+  inp.accept=".pdf,.doc,.docx,image/*"; inp.value="";
+  inp.onchange = async ()=>{
+    const file = inp.files[0]; if(!file) return;
+    busy(true);
+    try{
+      const ext=file.name.split(".").pop();
+      const fn = `Curriculo_${new Date().toISOString().slice(0,10)}.${ext}`;
+      await uploadFile(`Funcionarios/${f.pasta}/Curriculo/${fn}`, file, file.type);
+      f.curriculo = "Curriculo/"+fn;
+      urlCache.clear();
+      if(await saveDB()) toast("✅ Currículo enviado");
+    }catch(e){ toast("❌ "+e.message); }
+    busy(false); render();
+  };
+  inp.click();
+};
+
+/* --- foto (com redimensionamento) --- */
+A.trocarFoto = id=>{
+  const f=getF(id); const inp=document.getElementById("fileFoto"); inp.value="";
+  inp.onchange = async ()=>{
+    const file = inp.files[0]; if(!file) return;
+    busy(true);
+    try{
+      const blob = await resizeImg(file, 1100, .86);
+      const fn = `Foto_${new Date().toISOString().replace(/[:T]/g,"-").slice(0,19)}.jpg`;
+      await uploadFile(`Funcionarios/${f.pasta}/Fotos/${fn}`, blob, "image/jpeg");
+      f.foto = "Fotos/"+fn;
+      thumbCache.clear();
+      if(await saveDB()) toast("✅ Foto atualizada");
+    }catch(e){ toast("❌ "+e.message); }
+    busy(false); render();
+  };
+  inp.click();
+};
+function resizeImg(file, max, q){
+  return new Promise((res,rej)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      let {width:w, height:h} = img;
+      if(Math.max(w,h)>max){ const r=max/Math.max(w,h); w=Math.round(w*r); h=Math.round(h*r); }
+      const c = document.createElement("canvas"); c.width=w; c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      c.toBlob(b=>b?res(b):rej(new Error("Falha ao processar imagem")), "image/jpeg", q);
+    };
+    img.onerror = ()=>rej(new Error("Imagem inválida"));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/* --- alocações --- */
+const fAloc = (fixProj)=>[
+  ...(fixProj?[]:[{k:"projetoId", label:"Projeto", type:"select", req:1, full:1, opts:DB.projetos.map(p=>[p.id, p.nome+(getCli(p.clienteId)?` — ${getCli(p.clienteId).nome}`:"")])}]),
+  {k:"funcao", label:"Função no projeto", full:1},
+  {k:"inicio", label:"Início", type:"date"},
+  {k:"fim", label:"Saída (vazio = atual)", type:"date"},
+  {k:"observacoes", label:"Observações", type:"textarea"},
+];
+A.editAloc = (id,i)=>{ const f=getF(id); const a=i>=0?f.projetos[i]:{};
+  openForm(i>=0?"Editar alocação":"Alocar em projeto", fAloc(false), a, async v=>{
+    v.cargo = f.cargo;
+    if(i>=0) Object.assign(f.projetos[i],v); else f.projetos.push(v);
+    if(await saveDB()) toast("✅ Salvo");
+  }); };
+A.delAloc = (id,i)=> confirmar("Remover esta alocação?", async ()=>{ getF(id).projetos.splice(i,1); await saveDB(); });
+A.alocarNoProj = pid=>{
+  const ativos = DB.funcionarios.filter(f=>f.status==="Ativo");
+  openForm("Alocar funcionário", [
+    {k:"fid", label:"Funcionário", type:"select", req:1, full:1, opts:ativos.map(f=>[f.id, f.nome])},
+    ...fAloc(true)
+  ], {}, async v=>{
+    const f=getF(v.fid);
+    f.projetos.push({projetoId:pid, funcao:v.funcao, cargo:f.cargo, inicio:v.inicio, fim:v.fim, observacoes:v.observacoes});
+    if(await saveDB()) toast("✅ "+f.nome+" alocado");
+  });
+};
+
+/* --- clientes / projetos --- */
+A.editCli = id=>{ const c = id!==-1?getCli(id):null;
+  openForm(c?"Editar cliente":"Novo cliente", [
+    {k:"nome", label:"Nome do cliente", req:1},
+    {k:"empresaContratada", label:"Empresa contratada", type:"select", opts:[["",""],...empresaOpts()]},
+    {k:"cnpj", label:"CNPJ"}, {k:"uf", label:"UF"}, {k:"cidade", label:"Cidade"},
+    {k:"contato", label:"Contato principal"}, {k:"telefone", label:"Telefone"},
+    {k:"email", label:"E-mail", type:"email"},
+    {k:"observacoes", label:"Observações", type:"textarea"},
+  ], c||{}, async v=>{
+    if(c) Object.assign(c,v); else DB.clientes.push({id:uid(),...v});
+    if(await saveDB()) toast("✅ Salvo");
+  }); };
+A.editProj = id=>{ const p = id!==-1?getProj(id):null;
+  openForm(p?"Editar projeto":"Novo projeto", [
+    {k:"nome", label:"Nome do projeto", req:1, full:1},
+    {k:"clienteId", label:"Cliente", type:"select", opts:[["",""],...DB.clientes.map(c=>[c.id,c.nome])]},
+    {k:"status", label:"Status", type:"select", opts:["Em andamento","Planejado","Pausado","Concluído","Cancelado"]},
+    {k:"inicio", label:"Início", type:"date"}, {k:"fim", label:"Término", type:"date"},
+    {k:"descricao", label:"Descrição", type:"textarea"},
+    {k:"observacoes", label:"Observações", type:"textarea"},
+  ], p||{status:"Em andamento"}, async v=>{
+    if(p) Object.assign(p,v); else DB.projetos.push({id:uid(),...v});
+    if(await saveDB()) toast("✅ Salvo");
+  }); };
+
+/* --- cargos / regras --- */
+A.editCargo = i=>{ const c = i>=0?DB.cargos[i]:null;
+  openForm(c?"Editar cargo/nível":"Novo cargo/nível", [
+    {k:"cargo", label:"Cargo", req:1},
+    {k:"nivel", label:"Nível", type:"select", opts:Array.from({length:9},(_,x)=>[String(x+1),String(x+1)])},
+    {k:"salario", label:"Salário (R$)", type:"number", req:1},
+    {k:"cargaHoraria", label:"Carga horária", ph:"ex.: 220h"},
+    {k:"observacao", label:"Observação", type:"textarea"},
+  ], c||{nivel:"1"}, async v=>{
+    v.salario = v.salario?+String(v.salario).replace(",","."):null;
+    if(c) Object.assign(c,v); else DB.cargos.push({id:uid(), aumento:0, ...v});
+    if(await saveDB()) toast("✅ Salvo");
+  }); };
+A.editRegra = i=>{ const r = i>=0?DB.regrasSalario[i]:null;
+  openForm(r?"Editar regra":"Nova regra de referência", [
+    {k:"descricao", label:"Descrição", req:1, full:1},
+    {k:"salario", label:"Valor (R$)", type:"number"},
+    {k:"observacao", label:"Observação", type:"textarea"},
+  ], r||{}, async v=>{
+    v.salario = v.salario?+String(v.salario).replace(",","."):null;
+    if(r) Object.assign(r,v); else DB.regrasSalario.push({id:uid(),...v});
+    if(await saveDB()) toast("✅ Salvo");
+  }); };
+
+/* --- exportar Excel --- */
+A.exportar = ()=>{
+  try{
+    const wb = XLSX.utils.book_new();
+    const add = (nome, rows)=> XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), nome);
+    add("Funcionarios", DB.funcionarios.map(f=>({ID:f.id, Nome:f.nome, Status:f.status, Empresa:f.empresa, Cargo:f.cargo, "Nível":f.nivel, "Admissão":f.dataAdmissao, "Desligamento":f.dataDemissao, "Tempo de empresa":tempoEmpresa(f.dataAdmissao,f.dataDemissao), "Salário (tabela)":salarioDe(f), LinkedIn:f.linkedin, "Telefone":f.pessoal.telefonePessoal, "E-mail":f.pessoal.emailProfissional||f.pessoal.emailPessoal, CPF:f.pessoal.cpf, RG:f.pessoal.rg, Nascimento:f.pessoal.nascimento, "Endereço":f.pessoal.endereco, "Estado civil":f.pessoal.estadoCivil, "Contato emergência":f.pessoal.emergenciaNome, "Tel. emergência":f.pessoal.emergenciaTelefone, "Tipo sanguíneo":f.pessoal.tipoSanguineo, "Avaliação":f.avaliacao, "Observações":f.observacoes })));
+    add("Bancos", DB.funcionarios.flatMap(f=>f.bancos.map(b=>({Funcionario:f.nome, Banco:b.banco, "Agência":b.agencia, Conta:b.conta, "Tipo PIX":b.tipoPix, "Chave PIX":b.chavePix, "Obs":b.observacoes}))));
+    add("Documentos", DB.funcionarios.flatMap(f=>f.documentos.map(d=>({Funcionario:f.nome, Tipo:d.tipo, "Emissão":d.emissao, Validade:d.validade, Arquivo:d.arquivo, Obs:d.observacoes}))));
+    add("Clientes", DB.clientes.map(c=>({Nome:c.nome, "Empresa contratada":c.empresaContratada, CNPJ:c.cnpj, UF:c.uf, Cidade:c.cidade, Contato:c.contato, Telefone:c.telefone, Email:c.email})));
+    add("Projetos", DB.projetos.map(p=>({Projeto:p.nome, Cliente:getCli(p.clienteId)?.nome, Status:p.status, "Início":p.inicio, "Término":p.fim, "Descrição":p.descricao})));
+    add("Alocações", DB.funcionarios.flatMap(f=>f.projetos.map(a=>({Funcionario:f.nome, Projeto:getProj(a.projetoId)?.nome, "Função":a.funcao||a.cargo, "Início":a.inicio, "Saída":a.fim}))));
+    add("Cargos", DB.cargos.map(c=>({Cargo:c.cargo, "Nível":c.nivel, "Salário":c.salario, "% Aumento":c.aumento, "Carga horária":c.cargaHoraria, Obs:c.observacao})));
+    XLSX.writeFile(wb, `RH Livion ${new Date().toISOString().slice(0,10)}.xlsx`);
+    toast("✅ Planilha gerada");
+  }catch(e){ toast("❌ "+e.message); }
+};
+
+window.go = go; window.
