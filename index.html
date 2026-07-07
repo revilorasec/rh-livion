@@ -265,7 +265,7 @@ const ICONS = {
 /* ---------------- configuração / autenticação ---------------- */
 const SCOPES = ["User.Read","Files.ReadWrite.All"];
 const DEFAULT_FOLDER = "(RECURSOS HUMANOS APP)";
-const APP_VER = "1.3";
+const APP_VER = "1.4";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -520,6 +520,42 @@ function paintLogo(){
   });
 }
 
+/* ---------------- gráficos (SVG puro, sem bibliotecas) ---------------- */
+function svgDonut(segs, size){
+  size = size||150; const r=size/2, ir=r*0.62, cx=r, cy=r;
+  const total = segs.reduce((s,x)=>s+x.value,0);
+  let a=-Math.PI/2, paths="";
+  if(total>0){
+    segs.forEach(s=>{ if(!s.value) return;
+      const frac=s.value/total, a2=a+frac*Math.PI*2;
+      if(frac>=0.9999){ paths+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${s.color}"/>`; a=a2; return; }
+      const x1=cx+r*Math.cos(a), y1=cy+r*Math.sin(a), x2=cx+r*Math.cos(a2), y2=cy+r*Math.sin(a2);
+      const large=(a2-a)>Math.PI?1:0;
+      paths+=`<path d="M${cx} ${cy} L${x1.toFixed(2)} ${y1.toFixed(2)} A${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${s.color}"/>`;
+      a=a2;
+    });
+  } else { paths=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--gray-soft)"/>`; }
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="flex:none">${paths}<circle cx="${cx}" cy="${cy}" r="${ir}" fill="#fff"/><text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${(size*0.24).toFixed(0)}" font-weight="800" fill="#101a30">${total}</text></svg>`;
+}
+function icsEsc(s){ return String(s||"").replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\n/g,"\\n"); }
+function icsBirthday(f){
+  const [ , m, d] = String(f.pessoal.nascimento).slice(0,10).split("-");
+  const now = new Date(), yr = now.getFullYear();
+  const start = `${yr}${m}${d}`;
+  const nx = new Date(yr, +m-1, +d+1);
+  const end = `${nx.getFullYear()}${String(nx.getMonth()+1).padStart(2,"0")}${String(nx.getDate()).padStart(2,"0")}`;
+  const stamp = now.toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
+  return [
+    "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//RH Livion//PT-BR//","CALSCALE:GREGORIAN","METHOD:PUBLISH",
+    "BEGIN:VEVENT","UID:rh-niver-"+f.id+"@livion","DTSTAMP:"+stamp,
+    "DTSTART;VALUE=DATE:"+start,"DTEND;VALUE=DATE:"+end,"RRULE:FREQ=YEARLY",
+    "SUMMARY:🎂 Aniversário — "+icsEsc(f.nome),
+    "DESCRIPTION:"+icsEsc("Aniversário de "+f.nome+(f.cargo?(" — "+f.cargo):"")+" · RH Livion"),
+    "BEGIN:VALARM","TRIGGER:-P1D","ACTION:DISPLAY","DESCRIPTION:Aniversário amanhã","END:VALARM",
+    "END:VEVENT","END:VCALENDAR"
+  ].join("\r\n");
+}
+
 /* ---------------- telas ---------------- */
 function vDash(){
   const ativos = DB.funcionarios.filter(f=>f.status==="Ativo");
@@ -540,6 +576,19 @@ function vDash(){
   ativos.forEach(f=>{ const c=f.cargo||"Sem cargo"; porCargo[c]=(porCargo[c]||0)+1; });
   const distr = Object.entries(porCargo).sort((a,b)=>b[1]-a[1]);
   const mx = distr[0]?.[1]||1;
+  // por empresa
+  const porEmpresa = {};
+  ativos.forEach(f=>{ const e=f.empresa||"Sem empresa"; porEmpresa[e]=(porEmpresa[e]||0)+1; });
+  const distrEmp = Object.entries(porEmpresa).sort((a,b)=>b[1]-a[1]);
+  const mxE = distrEmp[0]?.[1]||1;
+  // folha salarial (ativos com salário na tabela)
+  const sals = ativos.map(salarioDe).filter(v=>v!=null && v>0);
+  const folha = sals.reduce((s,v)=>s+v,0);
+  const media = sals.length ? folha/sals.length : 0;
+  const projAtivos = DB.projetos.filter(p=>p.status==="Em andamento").length;
+  // distribuição por status (donut)
+  const STC = {"Ativo":"#15803d","Candidato":"#1d4ed8","Demitido":"#b91c1c","Pediu Demissão":"#b45309","Não Contratado":"#94a3b8"};
+  const segs = STATUS_OPTS.map(st=>({label:st, value:DB.funcionarios.filter(f=>f.status===st).length, color:STC[st]||"#94a3b8"})).filter(s=>s.value);
   return `
   <div class="h1">Olá, ${esc((account.name||"").split(" ")[0])} 👋</div>
   <div class="sub">Resumo de hoje, ${new Date().toLocaleDateString("pt-BR",{day:"numeric",month:"long"})}</div>
@@ -547,17 +596,39 @@ function vDash(){
     <div class="stat accent" onclick="S.filtro='Ativo';go('func')"><div class="n">${ativos.length}</div><div class="l">Funcionários ativos</div></div>
     <div class="stat" onclick="go('proj')"><div class="n">${emProj.size}</div><div class="l">Alocados em projetos</div></div>
     <div class="stat" onclick="S.filtro='Candidato';go('func')"><div class="n">${candidatos.length}</div><div class="l">Candidatos</div></div>
+    <div class="stat" onclick="go('proj')"><div class="n">${projAtivos}</div><div class="l">Projetos em andamento</div></div>
+    <div class="stat" onclick="go('cargos')"><div class="n" style="font-size:1.25rem">${money(folha)}</div><div class="l">Folha (ativos c/ salário)</div></div>
+    <div class="stat" onclick="go('cargos')"><div class="n" style="font-size:1.25rem">${money(media)}</div><div class="l">Salário médio</div></div>
     <div class="stat" style="${alerts.length?'outline:2px solid var(--warn)':''}"><div class="n" style="${alerts.length?'color:var(--warn)':''}">${alerts.length}</div><div class="l">Documentos a vencer</div></div>
   </div>
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+    <div class="card"><div class="secttl"><h3>📊 Quadro por status</h3></div>
+      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+        ${svgDonut(segs,150)}
+        <div style="flex:1;min-width:150px">${segs.map(s=>`<div class="distrow" style="cursor:pointer" onclick="S.filtro='${s.label}';go('func')"><span style="width:12px;height:12px;border-radius:3px;background:${s.color};flex:none"></span><span class="lb" style="width:auto;flex:1">${esc(s.label)}</span><span class="vl">${s.value}</span></div>`).join("")||`<div class="empty">Sem dados</div>`}</div>
+      </div></div>
     ${alerts.length?`<div class="card"><div class="secttl"><h3>⚠️ Documentos vencendo</h3></div>
       ${alerts.map(a=>`<div class="rowitem" style="cursor:pointer" onclick="A.abrirFicha('${a.f.id}','docs')"><div class="inf"><b>${esc(a.f.nome)}</b><span>${esc(a.d.tipo||"Documento")} · validade ${fmtDate(a.d.validade)}</span></div>${a.dias<0?'<span class="badge b-bad">vencido</span>':`<span class="badge b-warn">${a.dias}d</span>`}</div>`).join("")}</div>`:""}
     <div class="card"><div class="secttl"><h3>🎂 Aniversariantes do mês</h3></div>
-      ${nivers.length?nivers.map(f=>`<div class="rowitem" style="cursor:pointer" onclick="A.abrirFicha('${f.id}')">${avatarHtml(f,"md")}<div class="inf"><b>${esc(f.nome)}</b><span>dia ${+f.pessoal.nascimento.slice(8,10)} · ${new Date().getFullYear()-+f.pessoal.nascimento.slice(0,4)} anos</span></div></div>`).join(""):`<div class="empty">Nenhum aniversário este mês</div>`}</div>
+      ${nivers.length?nivers.map(f=>`<div class="rowitem"><div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer" onclick="A.abrirFicha('${f.id}')">${avatarHtml(f,"md")}<div class="inf"><b>${esc(f.nome)}</b><span>dia ${+f.pessoal.nascimento.slice(8,10)} · ${new Date().getFullYear()-+f.pessoal.nascimento.slice(0,4)} anos</span></div></div>
+        <button class="btn ghost sm" title="Adicionar à agenda" onclick="event.stopPropagation();A.aniverAgenda('${f.id}')">📅 Agenda</button></div>`).join(""):`<div class="empty">Nenhum aniversário este mês</div>`}</div>
     <div class="card"><div class="secttl"><h3>👥 Equipe ativa por cargo</h3></div>
       ${distr.map(([c,n])=>`<div class="distrow"><span class="lb">${esc(c)}</span><div class="bar"><i style="width:${Math.round(n/mx*100)}%"></i></div><span class="vl">${n}</span></div>`).join("")||`<div class="empty">Sem dados</div>`}</div>
+    <div class="card"><div class="secttl"><h3>🏢 Equipe ativa por empresa</h3></div>
+      ${distrEmp.map(([c,n])=>`<div class="distrow"><span class="lb">${esc(c)}</span><div class="bar"><i style="width:${Math.round(n/mxE*100)}%;background:var(--ok)"></i></div><span class="vl">${n}</span></div>`).join("")||`<div class="empty">Sem dados</div>`}</div>
   </div>`;
 }
+A.aniverAgenda = fid=>{
+  const f=getF(fid); if(!f||!f.pessoal.nascimento){ toast("Sem data de nascimento cadastrada"); return; }
+  try{
+    const blob = new Blob([icsBirthday(f)], {type:"text/calendar;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=`aniversario_${safeName(f.nome)}.ics`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    toast("📅 Evento gerado — abra o arquivo para adicionar à sua agenda");
+  }catch(e){ toast("❌ "+e.message); }
+};
 
 function vFunc(){
   const chips = ["Ativo","Todos","Candidato","Demitido","Pediu Demissão"];
@@ -622,6 +693,7 @@ function vTabela(){
   const cols = COLS.filter(c=>sel.includes(c.k));
   let list = DB.funcionarios.filter(f=> S.filtro==="Todos" || f.status===S.filtro);
   if(S.fCargo) list = list.filter(f=>f.cargo===S.fCargo);
+  if(S.fProj) list = list.filter(f=>f.projetos.some(a=>a.projetoId===S.fProj && !a.fim));
   const cargosEx = [...new Set(DB.funcionarios.map(f=>f.cargo).filter(Boolean))].sort();
   return `
   <div class="h1">Tabela</div>
@@ -629,6 +701,7 @@ function vTabela(){
   <div class="chips">${["Ativo","Todos","Candidato","Demitido","Pediu Demissão"].map(c=>`<button class="chip ${S.filtro===c?"on":""}" onclick="A.filtrar('${c}')">${c==="Todos"||c==="Pediu Demissão"?c:c+"s"}</button>`).join("")}</div>
   <div class="selrow">
     <select onchange="A.fCargo(this.value)"><option value="">Cargo: todos</option>${cargosEx.map(c=>`<option ${S.fCargo===c?"selected":""} value="${esc(c)}">${esc(c)}</option>`).join("")}</select>
+    <select onchange="A.fProj(this.value)"><option value="">Projeto: todos</option>${DB.projetos.map(p=>`<option ${S.fProj===p.id?"selected":""} value="${p.id}">${esc(p.nome)}</option>`).join("")}</select>
   </div>
   <div class="card" style="padding:12px 16px;margin-bottom:12px"><div class="colpick">
     ${COLS.map(c=>`<label class="chip"><input type="checkbox" ${sel.includes(c.k)?"checked":""} onchange="A.toggleCol('${c.k}')">${c.l}</label>`).join("")}
@@ -741,7 +814,7 @@ function vProj(){
       return `<div class="card">
         <div style="display:flex;align-items:center;gap:12px;cursor:pointer" onclick="A.toggleProj('${p.id}')">
           <div style="flex:1;min-width:0"><b>${p.icone?esc(p.icone)+" ":""}${esc(p.nome)}</b>
-          <div style="color:var(--mut);font-size:.8rem;margin-top:2px">${esc(cl?.nome||"Sem cliente")}${p.local?` · ${esc(p.local)}`:""}${p.inicio?` · desde ${fmtDate(p.inicio)}`:""}</div></div>
+          <div style="color:var(--mut);font-size:.8rem;margin-top:2px">${esc(cl?.nome||"Sem cliente")}${(p.locais&&p.locais.length)?` · 📍 ${esc(p.locais.join(" · "))}`:""}${p.inicio?` · desde ${fmtDate(p.inicio)}`:""}</div></div>
           <span class="badge ${p.status==="Em andamento"?"b-ok":p.status==="Concluído"?"b-gray":"b-info"}">${esc(p.status||"—")}</span>
           <span class="badge b-info">${equipe.length} 👤</span>
           <button class="iconbtn" onclick="event.stopPropagation();A.editProj('${p.id}')">${ICONS.edit}</button>
@@ -772,37 +845,48 @@ function vCargos(){
   const grupos = {};
   DB.cargos.forEach(c=>{ (grupos[c.cargo]=grupos[c.cargo]||[]).push(c); });
   Object.values(grupos).forEach(g=>g.sort((a,b)=>String(a.nivel).localeCompare(String(b.nivel),undefined,{numeric:true})));
+  // lista de cargos vem do catálogo (inclui cargos ainda sem nível)
+  const nomes = [...new Set([...DB.cargosMeta.map(c=>c.nome), ...Object.keys(grupos)])].sort((a,b)=>a.localeCompare(b));
   return `
   <div class="h1">Cargos & Salários</div>
-  <div class="sub">Clique em um cargo para ver os níveis</div>
-  ${DB.regrasSalario.length?`<div class="card" style="margin-bottom:14px"><div class="secttl"><h3>Regras de referência</h3><button class="btn sec sm" onclick="A.editRegra(-1)">${ICONS.plus}</button></div>
-    ${DB.regrasSalario.map((r,i)=>`<div class="rowitem"><div class="inf"><b>${esc(r.descricao)}</b><span>${r.observacao?esc(r.observacao):""}</span></div><b>${money(r.salario)}</b>
-    <button class="iconbtn" onclick="A.editRegra(${i})">${ICONS.edit}</button>
-    <button class="iconbtn" onclick="A.delRegra(${i})">${ICONS.del}</button></div>`).join("")}</div>`:""}
-  <div class="secttl"><h3>Cargos</h3><button class="btn sec sm" onclick="A.editCargo(-1)">${ICONS.plus} Novo cargo/nível</button></div>
+  <div class="sub">Clique em um cargo para ver e editar seus níveis e salários</div>
+  <div class="card" style="margin-bottom:14px"><div class="secttl"><h3>Regras de referência</h3><button class="btn sec sm" onclick="A.editRegra(-1)">${ICONS.plus}</button></div>
+    ${DB.regrasSalario.length?DB.regrasSalario.map((r,i)=>`<div class="rowitem"><div class="inf"><b>${esc(r.descricao)}</b>
+      <span>${r.baseRef==="minimo"?`🔒 salário mínimo + ${nv(r.percentual)}% (calculado automaticamente)`:(r.observacao?esc(r.observacao):"")}</span></div><b>${money(r.salario)}</b>
+      <button class="iconbtn" onclick="A.editRegra(${i})">${ICONS.edit}</button>
+      <button class="iconbtn" onclick="A.delRegra(${i})">${ICONS.del}</button></div>`).join(""):`<div class="empty">Nenhuma regra cadastrada</div>`}</div>
+  <div class="secttl"><h3>Cargos</h3><button class="btn sec sm" onclick="A.novoCargo()">${ICONS.plus} Novo cargo</button></div>
   <div class="grid">
-  ${Object.entries(grupos).sort().map(([nome,nvs])=>{
+  ${nomes.map(nome=>{
+    const nvs = grupos[nome] || [];
+    const meta = DB.cargosMeta.find(c=>c.nome===nome);
     const open = S.cargoOpen===nome;
     const nAtivos = DB.funcionarios.filter(f=>f.status==="Ativo"&&f.cargo===nome).length;
     const sals = nvs.map(c=>c.salario).filter(v=>v!=null);
-    const faixa = sals.length ? (sals.length>1 ? money(Math.min(...sals))+" – "+money(Math.max(...sals)) : money(sals[0])) : "—";
+    const faixa = sals.length ? (sals.length>1 ? money(Math.min(...sals))+" – "+money(Math.max(...sals)) : money(sals[0])) : "sem níveis";
     const key = encodeURIComponent(nome);
     return `<div class="card">
       <div style="display:flex;align-items:center;gap:12px;cursor:pointer" onclick="A.toggleCargo('${key}')">
         <div style="flex:1;min-width:0"><b>${esc(nome)}</b>
-          <div style="color:var(--mut);font-size:.8rem;margin-top:2px">${nvs.length} nível${nvs.length>1?"is":""} · ${faixa}</div></div>
+          <div style="color:var(--mut);font-size:.8rem;margin-top:2px">${nvs.length} nível${nvs.length!==1?"is":""} · ${faixa}</div></div>
         ${nAtivos?`<span class="badge b-info">${nAtivos} ativo${nAtivos>1?"s":""}</span>`:""}
         <span style="color:var(--mut);font-size:.8rem">${open?"▲":"▼"}</span>
       </div>
-      ${open?`<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:4px">
+      ${open?`<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:6px">
+        ${meta&&meta.observacao?`<div style="font-size:.83rem;color:var(--mut);padding:2px 2px 8px">📝 ${esc(meta.observacao)}</div>`:""}
         ${nvs.map(c=>{ const idx = DB.cargos.indexOf(c);
           return `<div class="rowitem"><div class="inf"><b>Nível ${nv(c.nivel)}</b>
             <span>${c.aumento?"+"+Math.round(c.aumento*100)+"% sobre o anterior":""}${c.cargaHoraria?` · ${esc(c.cargaHoraria)}`:""}${c.observacao?` · ${esc(c.observacao)}`:""}</span></div>
             <b>${money(c.salario)}</b>
             <button class="iconbtn" onclick="A.editCargo(${idx})">${ICONS.edit}</button>
-            <button class="iconbtn" onclick="A.delCargo(${idx})">${ICONS.del}</button></div>`;}).join("")}
+            <button class="iconbtn" onclick="A.delCargo(${idx})">${ICONS.del}</button></div>`;}).join("")||`<div class="empty" style="padding:10px">Nenhum nível ainda — adicione o primeiro</div>`}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn sec sm" onclick="A.addNivel('${key}')">${ICONS.plus} Adicionar nível</button>
+          <button class="btn ghost sm" onclick="A.editCargoMeta('${key}')">${ICONS.edit} Editar cargo</button>
+          <button class="btn danger sm" onclick="A.delCargoMeta('${key}')">${ICONS.del} Excluir cargo</button>
+        </div>
       </div>`:""}
-    </div>`;}).join("")}
+    </div>`;}).join("") || `<div class="empty card">Nenhum cargo — clique em “Novo cargo”</div>`}
   </div>`;
 }
 
@@ -917,7 +1001,7 @@ A.mudarLogo = ()=>{
 A.abrirArq = async (fid, rel)=>{ busy(true); try{ const f=getF(fid); const u = await fileUrl(`Funcionarios/${f.pasta}/${rel}`); window.open(u,"_blank"); }catch(e){ toast("❌ Arquivo não encontrado no OneDrive"); } busy(false); };
 
 /* --- funcionário: dados --- */
-const cargosOpts = ()=> [...new Set(DB.cargos.map(c=>c.cargo))].sort().map(c=>[c,c]);
+const cargosOpts = ()=> [...new Set([...DB.cargos.map(c=>c.cargo), ...(DB.cargosMeta||[]).map(c=>c.nome)].filter(Boolean))].sort().map(c=>[c,c]);
 const empresaOpts = ()=> (DB.empresas||[]).map(e=>[e,e]);
 const fDados = f => [
   {k:"nome", label:"Nome completo", req:1, full:1},
@@ -1129,43 +1213,119 @@ A.editCli = id=>{ const c = id!==-1?getCli(id):null;
     if(await saveDB()) toast("✅ Salvo");
   }); };
 A.editProj = id=>{ const p = id!==-1?getProj(id):null;
+  const init = p ? {...p, locais:(p.locais||[]).join("\n")} : {status:"Em andamento"};
   openForm(p?"Editar projeto":"Novo projeto", [
     {k:"nome", label:"Nome do projeto", req:1, full:1},
     {k:"clienteId", label:"Cliente", type:"select", opts:[["",""],...DB.clientes.map(c=>[c.id,c.nome])]},
     {k:"status", label:"Status", type:"select", opts:["Em andamento","Planejado","Pausado","Concluído","Cancelado"]},
     {k:"icone", label:"Ícone no mapa", type:"select", opts:["📌","🏗️","📡","💻","🛠️","🏢","🚚","🔧","📞","⚡","🌐","🏭"]},
-    {k:"local", label:"Local (cidade ou endereço)", ph:"ex.: Belém, PA"},
+    {k:"locais", label:"Locais no mapa (um por linha)", type:"textarea", full:1, ph:"Ex.:\nBelém, PA\nR. das Flores, 100 - Centro, Santarém, PA\nManaus, AM"},
     {k:"inicio", label:"Início", type:"date"}, {k:"fim", label:"Término", type:"date"},
     {k:"descricao", label:"Descrição", type:"textarea"},
     {k:"observacoes", label:"Observações", type:"textarea"},
-  ], p||{status:"Em andamento"}, async v=>{
+  ], init, async v=>{
+    const locais = String(v.locais||"").split("\n").map(s=>s.trim()).filter(Boolean);
+    v.locais = locais;
+    v.local = locais[0]||null; // compatibilidade
     if(p) Object.assign(p,v); else DB.projetos.push({id:uid(),...v});
     if(await saveDB()) toast("✅ Salvo");
   }); };
 
-/* --- cargos / regras --- */
-A.editCargo = i=>{ const c = i>=0?DB.cargos[i]:null;
-  openForm(c?"Editar cargo/nível":"Novo cargo/nível", [
-    {k:"cargo", label:"Cargo", req:1},
-    {k:"nivel", label:"Nível", type:"select", opts:Array.from({length:9},(_,x)=>[String(x+1),String(x+1)])},
+/* --- cargos (catálogo) / níveis / regras --- */
+A.novoCargo = ()=> openForm("Novo cargo", [
+    {k:"nome", label:"Nome do cargo", req:1, full:1, ph:"ex.: Técnico em Eletrônica"},
+    {k:"observacao", label:"Observação", type:"textarea"},
+  ], {}, async v=>{
+    if(DB.cargosMeta.some(c=>c.nome.toLowerCase()===v.nome.toLowerCase())){ toast("Esse cargo já existe"); return false; }
+    DB.cargosMeta.push({nome:v.nome, observacao:v.observacao||null});
+    if(await saveDB()){ toast("✅ Cargo criado — abra-o para adicionar níveis"); S.cargoOpen=v.nome; }
+  });
+A.editCargoMeta = key=>{ const nome = decodeURIComponent(key); const meta = DB.cargosMeta.find(c=>c.nome===nome) || {nome, observacao:null};
+  openForm("Editar cargo", [
+    {k:"nome", label:"Nome do cargo", req:1, full:1},
+    {k:"observacao", label:"Observação", type:"textarea"},
+  ], meta, async v=>{
+    if(v.nome!==nome && DB.cargosMeta.some(c=>c.nome.toLowerCase()===v.nome.toLowerCase())){ toast("Já existe um cargo com esse nome"); return false; }
+    // renomear propaga para níveis e funcionários
+    if(v.nome!==nome){
+      DB.cargos.forEach(c=>{ if(c.cargo===nome) c.cargo=v.nome; });
+      DB.funcionarios.forEach(f=>{ if(f.cargo===nome) f.cargo=v.nome; });
+      if(S.cargoOpen===nome) S.cargoOpen=v.nome;
+    }
+    if(DB.cargosMeta.find(c=>c.nome===nome)) Object.assign(DB.cargosMeta.find(c=>c.nome===nome), {nome:v.nome, observacao:v.observacao||null});
+    else DB.cargosMeta.push({nome:v.nome, observacao:v.observacao||null});
+    if(await saveDB()) toast("✅ Salvo");
+  }); };
+A.delCargoMeta = key=>{ const nome = decodeURIComponent(key);
+  const nNiveis = DB.cargos.filter(c=>c.cargo===nome).length;
+  const nFunc = DB.funcionarios.filter(f=>f.cargo===nome).length;
+  confirmar(`Excluir o cargo “${nome}”?${nNiveis?` ${nNiveis} nível(is) serão removidos.`:""}${nFunc?` ${nFunc} funcionário(s) continuarão com esse cargo no cadastro.`:""}`, async ()=>{
+    DB.cargos = DB.cargos.filter(c=>c.cargo!==nome);
+    DB.cargosMeta = DB.cargosMeta.filter(c=>c.nome!==nome);
+    if(S.cargoOpen===nome) S.cargoOpen=null;
+    if(await saveDB()) toast("✅ Cargo excluído");
+  }); };
+A.addNivel = key=>{ const nome = decodeURIComponent(key);
+  openForm(`Adicionar nível — ${nome}`, [
+    {k:"nivel", label:"Nível", req:1, ph:"ex.: 1, 2, Sênior…"},
     {k:"salario", label:"Salário (R$)", type:"number", req:1},
     {k:"cargaHoraria", label:"Carga horária", ph:"ex.: 220h"},
     {k:"observacao", label:"Observação", type:"textarea"},
-  ], c||{nivel:"1"}, async v=>{
+  ], {}, async v=>{
     v.salario = v.salario?+String(v.salario).replace(",","."):null;
-    if(c) Object.assign(c,v); else DB.cargos.push({id:uid(), aumento:0, ...v});
+    DB.cargos.push({id:uid(), cargo:nome, nivel:v.nivel, salario:v.salario, aumento:0, cargaHoraria:v.cargaHoraria||null, observacao:v.observacao||null});
+    if(!DB.cargosMeta.some(c=>c.nome===nome)) DB.cargosMeta.push({nome, observacao:null});
+    if(await saveDB()) toast("✅ Nível adicionado");
+  }); };
+A.editCargo = i=>{ const c = DB.cargos[i]; if(!c) return;
+  openForm(`Editar nível — ${c.cargo}`, [
+    {k:"nivel", label:"Nível", req:1},
+    {k:"salario", label:"Salário (R$)", type:"number", req:1},
+    {k:"cargaHoraria", label:"Carga horária", ph:"ex.: 220h"},
+    {k:"observacao", label:"Observação", type:"textarea"},
+  ], c, async v=>{
+    v.salario = v.salario?+String(v.salario).replace(",","."):null;
+    Object.assign(c,v);
     if(await saveDB()) toast("✅ Salvo");
   }); };
 A.editRegra = i=>{ const r = i>=0?DB.regrasSalario[i]:null;
-  openForm(r?"Editar regra":"Nova regra de referência", [
+  const baseMin = DB.regrasSalario.find(x=>x.ehSalarioMinimo);
+  const vinc = r && r.baseRef==="minimo";
+  const ov = openForm(r?"Editar regra":"Nova regra de referência", [
     {k:"descricao", label:"Descrição", req:1, full:1},
+    {k:"baseRef", label:"Cálculo do valor", type:"select", full:1, opts:[["","Valor fixo (digitado)"],["minimo","Salário mínimo + %"]]},
+    {k:"percentual", label:"% acima do salário mínimo", type:"number", ph:"ex.: 30"},
     {k:"salario", label:"Valor (R$)", type:"number"},
     {k:"observacao", label:"Observação", type:"textarea"},
-  ], r||{}, async v=>{
-    v.salario = v.salario?+String(v.salario).replace(",","."):null;
-    if(r) Object.assign(r,v); else DB.regrasSalario.push({id:uid(),...v});
+  ], r?{...r, baseRef:r.baseRef||""}:{}, async v=>{
+    if(v.baseRef==="minimo"){
+      if(!baseMin || (r&&r.ehSalarioMinimo)){ toast("Defina antes a regra 'Salário Mínimo Atual'"); return false; }
+      v.baseRef="minimo";
+      v.percentual = v.percentual!=null ? +String(v.percentual).replace(",",".") : 0;
+      v.salario = Math.round(Number(baseMin.salario||0)*(1+v.percentual/100)*100)/100;
+    } else {
+      v.baseRef=null; v.percentual=null;
+      v.salario = v.salario?+String(v.salario).replace(",","."):null;
+    }
+    if(r) Object.assign(r,v); else DB.regrasSalario.push({id:uid(), ehSalarioMinimo:false, ...v});
+    recalcRegras();
     if(await saveDB()) toast("✅ Salvo");
-  }); };
+  });
+  // liga/desliga campos conforme o tipo de cálculo, e trava o valor quando vinculado
+  const selBase = ov.querySelector("#ff_baseRef"), pct = ov.querySelector("#ff_percentual"), sal = ov.querySelector("#ff_salario");
+  const sync = ()=>{
+    const vinc = selBase.value==="minimo";
+    pct.closest(".fld").style.display = vinc ? "" : "none";
+    if(vinc){
+      sal.readOnly = true; sal.style.background="var(--gray-soft)"; sal.title="Calculado automaticamente";
+      const b = baseMin ? Number(baseMin.salario||0) : 0;
+      const p = pct.value!=="" ? +String(pct.value).replace(",",".") : 0;
+      sal.value = (Math.round(b*(1+p/100)*100)/100);
+    } else { sal.readOnly=false; sal.style.background=""; sal.title=""; }
+  };
+  selBase.addEventListener("change", sync);
+  pct.addEventListener("input", sync);
+  sync(); };
 
 /* --- exportar Excel --- */
 A.exportar = async ()=>{
@@ -1179,7 +1339,7 @@ A.exportar = async ()=>{
     add("Bancos", DB.funcionarios.flatMap(f=>f.bancos.map(b=>({Funcionario:f.nome, Banco:b.banco, "Agência":b.agencia, Conta:b.conta, "Tipo PIX":b.tipoPix, "Chave PIX":b.chavePix, "Obs":b.observacoes}))));
     add("Documentos", DB.funcionarios.flatMap(f=>f.documentos.map(d=>({Funcionario:f.nome, Tipo:d.tipo, "Emissão":d.emissao, Validade:d.validade, Arquivo:d.arquivo, Obs:d.observacoes}))));
     add("Clientes", DB.clientes.map(c=>({Nome:c.nome, "Empresa contratada":c.empresaContratada, CNPJ:c.cnpj, UF:c.uf, Cidade:c.cidade, Contato:c.contato, Telefone:c.telefone, Email:c.email})));
-    add("Projetos", DB.projetos.map(p=>({Projeto:p.nome, Cliente:getCli(p.clienteId)?.nome, Status:p.status, "Início":p.inicio, "Término":p.fim, "Descrição":p.descricao})));
+    add("Projetos", DB.projetos.map(p=>({Projeto:p.nome, Cliente:getCli(p.clienteId)?.nome, Status:p.status, Locais:(p.locais||[]).join(" | "), "Início":p.inicio, "Término":p.fim, "Descrição":p.descricao})));
     add("Alocações", DB.funcionarios.flatMap(f=>f.projetos.map(a=>({Funcionario:f.nome, Projeto:getProj(a.projetoId)?.nome, "Função":a.funcao||a.cargo, "Início":a.inicio, "Saída":a.fim}))));
     add("Cargos", DB.cargos.map(c=>({Cargo:c.cargo, "Nível":c.nivel, "Salário":c.salario, "% Aumento":c.aumento, "Carga horária":c.cargaHoraria, Obs:c.observacao})));
     XLSX.writeFile(wb, `RH Livion ${new Date().toISOString().slice(0,10)}.xlsx`);
@@ -1206,7 +1366,42 @@ function normalizeDB(){
       if(p.tiposAlergias) p.saude.alergias.push(p.tiposAlergias);
     }
   });
-  DB.projetos.forEach(p=>{ if(p.icone===undefined) p.icone="📌"; if(p.local===undefined) p.local=null; });
+  DB.projetos.forEach(p=>{
+    if(p.icone===undefined || p.icone===null) p.icone="📌";
+    if(p.local===undefined) p.local=null;
+    // múltiplos locais por projeto (migra o campo antigo "local")
+    if(!Array.isArray(p.locais)){
+      p.locais = p.local ? [p.local] : [];
+    }
+  });
+  // catálogo de cargos (permite cargos sem nível ainda) + observação por cargo
+  if(!Array.isArray(DB.cargosMeta)) DB.cargosMeta = [];
+  const nomesExistentes = new Set(DB.cargosMeta.map(c=>c.nome));
+  [...new Set(DB.cargos.map(c=>c.cargo).filter(Boolean))].forEach(nome=>{
+    if(!nomesExistentes.has(nome)){ DB.cargosMeta.push({nome, observacao:null}); nomesExistentes.add(nome); }
+  });
+  // regras de salário: identifica o salário mínimo base e recalcula regras vinculadas
+  const baseMin = DB.regrasSalario.find(r=>r.ehSalarioMinimo) || DB.regrasSalario.find(r=>/m[íi]nimo atual/i.test(r.descricao||""));
+  if(baseMin) baseMin.ehSalarioMinimo = true;
+  DB.regrasSalario.forEach(r=>{
+    // regra GRUPORH histórica passa a calcular pelo % sobre o salário mínimo
+    if(r.baseRef===undefined){
+      if(/gruporh/i.test(r.descricao||"") && r.aumento!=null){ r.baseRef="minimo"; r.percentual = Math.round(r.aumento*100); }
+      else r.baseRef=null;
+    }
+  });
+  recalcRegras();
+}
+/* recalcula salários das regras vinculadas ao salário mínimo */
+function recalcRegras(){
+  if(!Array.isArray(DB.regrasSalario)) return;
+  const base = DB.regrasSalario.find(r=>r.ehSalarioMinimo);
+  if(!base) return;
+  DB.regrasSalario.forEach(r=>{
+    if(r.baseRef==="minimo" && r.percentual!=null){
+      r.salario = Math.round(Number(base.salario||0) * (1 + Number(r.percentual)/100) * 100) / 100;
+    }
+  });
 }
 
 /* ---------------- links clicáveis ---------------- */
@@ -1231,19 +1426,45 @@ async function ensureLeaflet(){
   ]);
 }
 function geoCache(){ try{ return JSON.parse(localStorage.getItem("rh_geo")||"{}"); }catch(e){ return {}; } }
-async function geocode(q){
-  const c = geoCache();
-  if(q in c) return c[q];
+function geoSet(q, v){ try{ const c=geoCache(); c[q]=v; localStorage.setItem("rh_geo", JSON.stringify(c)); }catch(e){} }
+/* uma consulta ao Nominatim (respeita 1 req/s) */
+async function geoQuery(q){
   const wait = Math.max(0, lastGeo + 1100 - Date.now());
   if(wait) await new Promise(r=>setTimeout(r, wait));
   lastGeo = Date.now();
   try{
-    const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q));
+    const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&accept-language=pt-BR&q="+encodeURIComponent(q));
+    if(!r.ok) return null;
     const j = await r.json();
-    const v = j[0] ? [+j[0].lat, +j[0].lon] : null;
-    c[q]=v; localStorage.setItem("rh_geo", JSON.stringify(c));
-    return v;
+    return j[0] ? [+j[0].lat, +j[0].lon] : null;
   }catch(e){ return null; }
+}
+/* gera variações do endereço, da mais específica para a mais genérica */
+function geoVariants(q){
+  const raw = String(q||"").trim();
+  const out = [];
+  const add = s=>{ s=s.replace(/\s{2,}/g," ").trim(); if(s && !out.includes(s)) out.push(s); };
+  add(/brasil/i.test(raw) ? raw : raw+", Brasil");
+  // remove número da porta inicial e ruídos como "Nº:", "Ap"
+  const parts = raw.split(",").map(s=>s.trim()).filter(Boolean);
+  if(parts.length>=2){
+    // últimas 3, 2 e 1 partes (bairro/cidade/UF) — mais fáceis de localizar
+    for(const n of [3,2,1]){
+      if(parts.length>=n){ add(parts.slice(-n).join(", ")+", Brasil"); }
+    }
+  }
+  return out;
+}
+async function geocode(q){
+  if(!q) return null;
+  const c = geoCache();
+  if(q in c && c[q]) return c[q];       // usa só acertos em cache
+  for(const variant of geoVariants(q)){
+    const v = await geoQuery(variant);
+    if(v){ geoSet(q, v); return v; }
+  }
+  // não encontrou em nenhuma variação — não guarda null para poder tentar de novo depois
+  return null;
 }
 function vMapa(){
   const cargosEx = [...new Set(DB.funcionarios.map(f=>f.cargo).filter(Boolean))].sort();
@@ -1256,7 +1477,7 @@ function vMapa(){
     <select onchange="A.fProj(this.value)"><option value="">Projeto: todos</option>${DB.projetos.map(p=>`<option ${S.fProj===p.id?"selected":""} value="${p.id}">${esc(p.icone||"")} ${esc(p.nome)}</option>`).join("")}</select>
   </div>
   <div class="card" style="padding:8px"><div id="map" style="height:62dvh;border-radius:12px;background:var(--gray-soft)"></div></div>
-  <div class="sub" style="margin-top:10px">🔵 funcionário (iniciais) · emoji = projeto (defina o local do projeto ao editá-lo). Endereços vêm do cadastro pessoal.</div>`;
+  <div class="sub" style="margin-top:10px">🔵 funcionário (iniciais) · emoji = projeto (cada projeto pode ter vários locais — defina em “Locais no mapa” ao editá-lo). Filtre por um projeto para ver seus locais e sua equipe. Endereços vêm do cadastro pessoal.</div>`;
 }
 async function initMapa(){
   const el = document.getElementById("map");
@@ -1270,13 +1491,19 @@ async function initMapa(){
   if(S.fCargo) list = list.filter(f=>f.cargo===S.fCargo);
   if(S.fProj) list = list.filter(f=>f.projetos.some(a=>a.projetoId===S.fProj && !a.fim));
   const st = document.getElementById("mapstatus");
-  const pts = []; let sem = 0;
-  for(const p of DB.projetos.filter(p=>p.local)){
-    if(!document.body.contains(el)) return;
-    const g = await geocode(p.local); if(!g) continue;
-    L.marker(g,{icon:L.divIcon({className:"", html:`<div style="font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))">${p.icone||"📌"}</div>`, iconSize:[26,26], iconAnchor:[13,13]})}).addTo(MAP)
-      .bindPopup(`<b>${esc(p.icone||"")} ${esc(p.nome)}</b><br>${esc(getCli(p.clienteId)?.nome||"")}<br>${esc(p.local)}`);
-    pts.push(g);
+  const pts = []; let sem = 0, semProj = 0;
+  // projetos (com um ou vários locais). Se um projeto está filtrado, mostra só ele.
+  const projsMapa = DB.projetos.filter(p=> (!S.fProj || p.id===S.fProj) && (p.locais&&p.locais.length));
+  for(const p of projsMapa){
+    for(const loc of p.locais){
+      if(!document.body.contains(el)) return;
+      if(st) st.textContent = "Localizando projeto: "+p.nome+"…";
+      const g = await geocode(loc); if(!g){ semProj++; continue; }
+      const equipe = DB.funcionarios.filter(f=>f.projetos.some(a=>a.projetoId===p.id&&!a.fim));
+      L.marker(g,{icon:L.divIcon({className:"", html:`<div style="font-size:28px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))">${p.icone||"📌"}</div>`, iconSize:[28,28], iconAnchor:[14,14]})}).addTo(MAP)
+        .bindPopup(`<b>${esc(p.icone||"")} ${esc(p.nome)}</b><br>${esc(getCli(p.clienteId)?.nome||"")}<br>📍 ${esc(loc)}${equipe.length?`<br><br><b>Equipe (${equipe.length}):</b><br>${equipe.map(f=>esc(f.nome)).join("<br>")}`:""}`);
+      pts.push(g);
+    }
   }
   for(const f of list){
     if(!document.body.contains(el)) return;
@@ -1289,7 +1516,7 @@ async function initMapa(){
       .bindPopup(`<b>${esc(f.nome)}</b><br>${esc(f.cargo||"")}<br>${esc(end)}<br><a href="#" onclick="A.abrirFicha('${f.id}');return false">Abrir ficha →</a>`);
     pts.push(g);
   }
-  if(st) st.textContent = pts.length ? `${pts.length} ponto(s) no mapa${sem?` · ${sem} funcionário(s) sem endereço localizável`:""}` : "Nenhum endereço localizável — preencha o campo Endereço no cadastro pessoal (ex.: cidade, UF)";
+  if(st) st.textContent = pts.length ? `${pts.length} ponto(s) no mapa${sem?` · ${sem} funcionário(s) sem endereço localizável`:""}${semProj?` · ${semProj} local(is) de projeto não localizado(s)`:""}` : "Nenhum ponto localizável — preencha o Endereço no cadastro pessoal e os Locais dos projetos (ex.: cidade, UF).";
   if(pts.length && document.body.contains(el)) MAP.fitBounds(pts, {padding:[40,40], maxZoom:11});
 }
 
