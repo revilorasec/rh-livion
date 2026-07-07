@@ -6,8 +6,6 @@
 <meta name="theme-color" content="#1d4ed8">
 <title>RH · Livion Solutions</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231d4ed8'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3ERH%3C/text%3E%3C/svg%3E">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/msal-browser/2.38.4/msal-browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --bg:#eef2f8; --card:#ffffff; --ink:#101a30; --mut:#5d6b85; --line:#e2e8f2;
@@ -197,6 +195,38 @@ img{display:block}
 /* =====================================================================
    RH Livion — app único (HTML+JS) · dados no OneDrive via Microsoft Graph
    ===================================================================== */
+window.addEventListener("error", ev=>{
+  const g = document.getElementById("gate");
+  if(g && !g.classList.contains("hide")){
+    g.innerHTML = `<div class="card"><div class="mark">RH</div><h1>Erro no aplicativo</h1><p style="color:#b91c1c;word-break:break-word">${String(ev.message||ev.error||"desconhecido")}</p><p>Tire um print desta tela para suporte.</p><button class="btn" onclick="location.reload()">Recarregar</button></div>`;
+  }
+});
+/* carrega bibliotecas com CDNs alternativos (resiliente a bloqueios) */
+function loadScript(list){
+  return new Promise((res,rej)=>{
+    const next=()=>{
+      if(!list.length) return rej(new Error("Não foi possível carregar uma biblioteca necessária. Verifique sua internet/firewall e recarregue a página."));
+      const s=document.createElement("script");
+      s.src=list.shift(); s.onload=()=>res(); s.onerror=next;
+      document.head.appendChild(s);
+    };
+    next();
+  });
+}
+const LIB_MSAL = loadScript([
+  "https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js",
+  "https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.4/lib/msal-browser.min.js",
+  "https://unpkg.com/@azure/msal-browser@2.38.4/lib/msal-browser.min.js"
+]);
+LIB_MSAL.catch(()=>{});
+let LIB_XLSX = null;
+function ensureXlsx(){
+  return LIB_XLSX || (LIB_XLSX = loadScript([
+    "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+    "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"
+  ]));
+}
 const ICONS = {
   home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
   team:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5"/><circle cx="17.5" cy="9.5" r="2.5"/><path d="M16 15.2c2.6.3 4.6 1.8 5.5 4.8"/></svg>',
@@ -259,6 +289,7 @@ async function boot(){
   loadCfg();
   if(!cfg || !cfg.cid){ showSetup(); return; }
   try{
+    if(typeof msal === "undefined") await LIB_MSAL;
     msalApp = new msal.PublicClientApplication({
       auth:{ clientId:cfg.cid, authority:"https://login.microsoftonline.com/"+cfg.tid, redirectUri:location.origin+location.pathname },
       cache:{ cacheLocation:"localStorage" }
@@ -935,8 +966,11 @@ A.editRegra = i=>{ const r = i>=0?DB.regrasSalario[i]:null;
   }); };
 
 /* --- exportar Excel --- */
-A.exportar = ()=>{
+A.exportar = async ()=>{
   try{
+    busy(true);
+    if(typeof XLSX === "undefined") await ensureXlsx();
+    busy(false);
     const wb = XLSX.utils.book_new();
     const add = (nome, rows)=> XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), nome);
     add("Funcionarios", DB.funcionarios.map(f=>({ID:f.id, Nome:f.nome, Status:f.status, Empresa:f.empresa, Cargo:f.cargo, "Nível":f.nivel, "Admissão":f.dataAdmissao, "Desligamento":f.dataDemissao, "Tempo de empresa":tempoEmpresa(f.dataAdmissao,f.dataDemissao), "Salário (tabela)":salarioDe(f), LinkedIn:f.linkedin, "Telefone":f.pessoal.telefonePessoal, "E-mail":f.pessoal.emailProfissional||f.pessoal.emailPessoal, CPF:f.pessoal.cpf, RG:f.pessoal.rg, Nascimento:f.pessoal.nascimento, "Endereço":f.pessoal.endereco, "Estado civil":f.pessoal.estadoCivil, "Contato emergência":f.pessoal.emergenciaNome, "Tel. emergência":f.pessoal.emergenciaTelefone, "Tipo sanguíneo":f.pessoal.tipoSanguineo, "Avaliação":f.avaliacao, "Observações":f.observacoes })));
@@ -948,7 +982,11 @@ A.exportar = ()=>{
     add("Cargos", DB.cargos.map(c=>({Cargo:c.cargo, "Nível":c.nivel, "Salário":c.salario, "% Aumento":c.aumento, "Carga horária":c.cargaHoraria, Obs:c.observacao})));
     XLSX.writeFile(wb, `RH Livion ${new Date().toISOString().slice(0,10)}.xlsx`);
     toast("✅ Planilha gerada");
-  }catch(e){ toast("❌ "+e.message); }
+  }catch(e){ busy(false); toast("❌ "+e.message); }
 };
 
-window.go = go; window.
+window.go = go; window.A = A;
+boot();
+</script>
+</body>
+</html>
