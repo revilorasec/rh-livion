@@ -268,7 +268,7 @@ const ICONS = {
 /* ---------------- configuração / autenticação ---------------- */
 const SCOPES = ["User.Read","Files.ReadWrite.All"];
 const DEFAULT_FOLDER = "(RECURSOS HUMANOS APP)";
-const APP_VER = "1.6";
+const APP_VER = "1.7";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -830,8 +830,9 @@ function vProj(){
         </div>
         ${open?`<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:6px">
           ${p.descricao?`<div style="font-size:.85rem;color:var(--mut);padding:6px 0">${esc(p.descricao)}</div>`:""}
-          ${equipe.length?equipe.map(({f,a})=>`<div class="rowitem" style="cursor:pointer" onclick="A.abrirFicha('${f.id}','proj')">${avatarHtml(f,"md")}<div class="inf"><b>${esc(f.nome)}</b><span>${esc(a.funcao||a.cargo||f.cargo||"")}</span></div></div>`).join(""):`<div class="empty">Ninguém alocado</div>`}
-          <button class="btn ghost sm" style="margin-top:8px" onclick="A.alocarNoProj('${p.id}')">${ICONS.plus} Alocar funcionário</button>
+          ${equipe.length?equipe.map(({f,a})=>`<div class="rowitem"><div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer" onclick="A.abrirFicha('${f.id}','proj')">${avatarHtml(f,"md")}<div class="inf"><b>${esc(f.nome)}</b><span>${esc(a.funcao||a.cargo||f.cargo||"")}</span></div></div>
+            <button class="iconbtn" title="Remover deste projeto" onclick="event.stopPropagation();A.desalocarDoProj('${f.id}','${p.id}')">${ICONS.del}</button></div>`).join(""):`<div class="empty">Ninguém alocado</div>`}
+          <button class="btn ghost sm" style="margin-top:8px" onclick="A.alocarNoProj('${p.id}')">${ICONS.plus} Gerenciar equipe</button>
         </div>`:""}
       </div>`;}).join("") || `<div class="empty card">Nenhum projeto com esse cliente</div>`}
   </div>
@@ -1197,23 +1198,33 @@ A.editAloc = (id,i)=>{ const f=getF(id); const a=i>=0?f.projetos[i]:{};
     if(await saveDB()) toast("✅ Salvo");
   }); };
 A.delAloc = (id,i)=> confirmar("Remover esta alocação?", async ()=>{ getF(id).projetos.splice(i,1); await saveDB(); });
+A.desalocarDoProj = (fid,pid)=>{ const f=getF(fid); const p=getProj(pid);
+  confirmar(`Remover ${f.nome} do projeto “${p?.nome||""}”?`, async ()=>{
+    f.projetos = f.projetos.filter(a=>!(a.projetoId===pid && !a.fim));
+    if(await saveDB()) toast("✅ Removido do projeto");
+  }); };
 A.alocarNoProj = pid=>{
   const proj = getProj(pid);
   const all = DB.funcionarios;
   const jaNoProj = new Set(all.filter(f=>f.projetos.some(a=>a.projetoId===pid&&!a.fim)).map(f=>f.id));
   const cargos = [...new Set(all.map(f=>f.cargo).filter(Boolean))].sort();
-  const sel = new Set();                          // mantém as seleções ao trocar de filtro
+  const checked = new Set(jaNoProj);              // começa com quem já está no projeto
   const F = { status:"Ativo", cargo:"", proj:"", q:"" };
   const projNome = id => getProj(id)?.nome || "";
   const filtrar = ()=>{
     const q = F.q.toLowerCase();
     return all.filter(f=>{
+      const ja = jaNoProj.has(f.id);
+      if(q && !(f.nome+" "+(f.cargo||"")+" "+f.id).toLowerCase().includes(q)) return false;
+      if(ja) return true;                         // membros atuais sempre aparecem (para poder remover)
       if(F.status!=="Todos" && f.status!==F.status) return false;
       if(F.cargo && f.cargo!==F.cargo) return false;
       if(F.proj && !f.projetos.some(a=>a.projetoId===F.proj && !a.fim)) return false;
-      if(q && !(f.nome+" "+(f.cargo||"")+" "+f.id).toLowerCase().includes(q)) return false;
       return true;
-    }).sort((a,b)=>a.nome.localeCompare(b.nome));
+    }).sort((a,b)=>{
+      const ja = (jaNoProj.has(b.id)?1:0)-(jaNoProj.has(a.id)?1:0);  // já no projeto primeiro
+      return ja || a.nome.localeCompare(b.nome);
+    });
   };
   const rowsHtml = ()=>{
     const list = filtrar();
@@ -1221,44 +1232,46 @@ A.alocarNoProj = pid=>{
     return list.map(f=>{
       const ja = jaNoProj.has(f.id);
       const projs = f.projetos.filter(a=>!a.fim).map(a=>projNome(a.projetoId)).filter(Boolean);
-      return `<label class="check" style="align-items:flex-start"><input type="checkbox" value="${f.id}" ${ja?"disabled checked":(sel.has(f.id)?"checked":"")} style="margin-top:3px">
+      return `<label class="check" style="align-items:flex-start"><input type="checkbox" value="${f.id}" ${checked.has(f.id)?"checked":""} style="margin-top:3px">
         <div style="flex:1;min-width:0"><b>${esc(f.nome)}</b>
           <div style="color:var(--mut);font-size:.72rem">${esc(f.cargo||"—")}${projs.length?` · 📁 ${esc(projs.join(", "))}`:""}</div></div>
-        ${ja?'<span class="badge b-ok" style="flex:none">já no projeto</span>':sBadge(f.status)}</label>`;
+        ${ja?'<span class="badge b-ok" style="flex:none">no projeto</span>':sBadge(f.status)}</label>`;
     }).join("");
   };
   const ov = document.createElement("div"); ov.className="overlay";
-  ov.innerHTML = `<div class="modal"><h3>Alocar em ${esc(proj?.nome||"projeto")}</h3>
+  ov.innerHTML = `<div class="modal"><h3>Equipe de ${esc(proj?.nome||"projeto")}</h3>
+    <div class="sub" style="margin:-6px 0 12px">Marque para incluir · desmarque para remover do projeto</div>
     <div class="search" style="margin-bottom:10px">${ICONS.search}<input id="al_q" placeholder="Buscar por nome, cargo…"></div>
     <div class="selrow">
       <select id="al_status">${["Ativo","Todos","Candidato","Demitido","Pediu Demissão"].map(s=>`<option ${s==="Ativo"?"selected":""} value="${s}">${s==="Todos"?"Status: todos":s}</option>`).join("")}</select>
       <select id="al_cargo"><option value="">Cargo: todos</option>${cargos.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select>
       <select id="al_proj"><option value="">Projeto: qualquer</option>${DB.projetos.map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join("")}</select>
     </div>
-    <div class="fld" style="margin:4px 0"><label>Selecione um ou vários</label></div>
-    <div id="al_lista" style="max-height:34dvh;overflow:auto;border:1.5px solid var(--line);border-radius:11px;padding:2px 10px">${rowsHtml()}</div>
+    <div id="al_lista" style="max-height:34dvh;overflow:auto;border:1.5px solid var(--line);border-radius:11px;padding:2px 10px;margin-top:4px">${rowsHtml()}</div>
     <div class="fgrid" style="margin-top:12px">
-      <div class="fld"><label>Função no projeto</label><input id="al_funcao"></div>
-      <div class="fld"><label>Data de início</label><input type="date" id="al_inicio"></div>
+      <div class="fld"><label>Função (para os novos)</label><input id="al_funcao"></div>
+      <div class="fld"><label>Início (para os novos)</label><input type="date" id="al_inicio"></div>
     </div>
-    <div class="acts"><button class="btn ghost" data-x>Cancelar</button><button class="btn" data-ok>Alocar selecionados</button></div></div>`;
+    <div class="acts"><button class="btn ghost" data-x>Cancelar</button><button class="btn" data-ok>Salvar equipe</button></div></div>`;
   document.body.appendChild(ov);
   const listEl = ov.querySelector("#al_lista");
   const redraw = ()=>{ listEl.innerHTML = rowsHtml(); };
   ov.addEventListener("click", e=>{ if(e.target===ov) ov.remove(); });
   ov.querySelector("[data-x]").onclick = ()=>ov.remove();
-  listEl.addEventListener("change", e=>{ const cb=e.target; if(!cb.value||cb.disabled) return; if(cb.checked) sel.add(cb.value); else sel.delete(cb.value); });
+  listEl.addEventListener("change", e=>{ const cb=e.target; if(!cb.value) return; if(cb.checked) checked.add(cb.value); else checked.delete(cb.value); });
   ov.querySelector("#al_q").addEventListener("input", e=>{ F.q=e.target.value; redraw(); });
   ov.querySelector("#al_status").addEventListener("change", e=>{ F.status=e.target.value; redraw(); });
   ov.querySelector("#al_cargo").addEventListener("change", e=>{ F.cargo=e.target.value; redraw(); });
   ov.querySelector("#al_proj").addEventListener("change", e=>{ F.proj=e.target.value; redraw(); });
   ov.querySelector("[data-ok]").onclick = async ()=>{
-    const ids = [...sel].filter(id=>!jaNoProj.has(id));
-    if(!ids.length){ toast("Selecione pelo menos um funcionário"); return; }
+    const toAdd = [...checked].filter(id=>!jaNoProj.has(id));
+    const toRemove = [...jaNoProj].filter(id=>!checked.has(id));
+    if(!toAdd.length && !toRemove.length){ toast("Nada alterado"); return; }
     const funcao = ov.querySelector("#al_funcao").value.trim()||null;
     const inicio = ov.querySelector("#al_inicio").value||null;
-    ids.forEach(id=>{ const f=getF(id); f.projetos.push({projetoId:pid, funcao, cargo:f.cargo, inicio, fim:null, observacoes:null}); });
-    if(await saveDB()){ ov.remove(); toast(`✅ ${ids.length} funcionário(s) alocado(s)`); render(); }
+    toAdd.forEach(id=>{ const f=getF(id); f.projetos.push({projetoId:pid, funcao, cargo:f.cargo, inicio, fim:null, observacoes:null}); });
+    toRemove.forEach(id=>{ const f=getF(id); f.projetos = f.projetos.filter(a=>!(a.projetoId===pid && !a.fim)); });
+    if(await saveDB()){ ov.remove(); toast(`✅ Equipe atualizada (+${toAdd.length} / −${toRemove.length})`); render(); }
   };
 };
 
