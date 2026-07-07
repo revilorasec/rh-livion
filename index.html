@@ -264,7 +264,7 @@ const ICONS = {
 /* ---------------- configuração / autenticação ---------------- */
 const SCOPES = ["User.Read","Files.ReadWrite.All"];
 const DEFAULT_FOLDER = "(RECURSOS HUMANOS APP)";
-const APP_VER = "1.1";
+const APP_VER = "1.2";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -615,17 +615,22 @@ function colVal(f,k){
 function vTabela(){
   const sel = getCols();
   const cols = COLS.filter(c=>sel.includes(c.k));
-  const list = DB.funcionarios.filter(f=> S.filtro==="Todos" || f.status===S.filtro);
+  let list = DB.funcionarios.filter(f=> S.filtro==="Todos" || f.status===S.filtro);
+  if(S.fCargo) list = list.filter(f=>f.cargo===S.fCargo);
+  const cargosEx = [...new Set(DB.funcionarios.map(f=>f.cargo).filter(Boolean))].sort();
   return `
   <div class="h1">Tabela</div>
-  <div class="sub">Marque as colunas que quer ver — ex.: Nome + PIX para pagamentos</div>
+  <div class="sub">Marque as colunas que quer ver — selecione e copie os dados livremente</div>
   <div class="chips">${["Ativo","Todos","Candidato","Demitido","Pediu Demissão"].map(c=>`<button class="chip ${S.filtro===c?"on":""}" onclick="A.filtrar('${c}')">${c==="Todos"||c==="Pediu Demissão"?c:c+"s"}</button>`).join("")}</div>
+  <div class="selrow">
+    <select onchange="A.fCargo(this.value)"><option value="">Cargo: todos</option>${cargosEx.map(c=>`<option ${S.fCargo===c?"selected":""} value="${esc(c)}">${esc(c)}</option>`).join("")}</select>
+  </div>
   <div class="card" style="padding:12px 16px;margin-bottom:12px"><div class="colpick">
     ${COLS.map(c=>`<label class="chip"><input type="checkbox" ${sel.includes(c.k)?"checked":""} onchange="A.toggleCol('${c.k}')">${c.l}</label>`).join("")}
   </div></div>
   <div class="card" style="overflow-x:auto;padding:10px">
-    <table class="tbl"><thead><tr>${cols.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead>
-    <tbody>${list.map(f=>`<tr style="cursor:pointer" onclick="A.abrirFicha('${f.id}')">${cols.map(c=>`<td>${colVal(f,c.k)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length}" class="empty">Ninguém neste filtro</td></tr>`}</tbody></table>
+    <table class="tbl" style="user-select:text"><thead><tr>${cols.map(c=>`<th>${c.l}</th>`).join("")}<th></th></tr></thead>
+    <tbody>${list.map(f=>`<tr>${cols.map(c=>`<td>${colVal(f,c.k)}</td>`).join("")}<td><button class="iconbtn" title="Abrir ficha" onclick="A.abrirFicha('${f.id}')">${ICONS.open}</button></td></tr>`).join("") || `<tr><td colspan="${cols.length+1}" class="empty">Ninguém neste filtro</td></tr>`}</tbody></table>
   </div>`;
 }
 
