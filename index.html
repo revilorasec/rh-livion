@@ -99,6 +99,18 @@ img{display:block}
 .iconbtn{width:34px;height:34px;border-radius:9px;display:inline-grid;place-items:center;background:var(--gray-soft);color:var(--mut)}
 .iconbtn svg{width:16px;height:16px}
 .iconbtn:hover{background:var(--brand-soft);color:var(--brand)}
+.rowitem>svg{width:22px;height:22px;flex:none;color:var(--brand)}
+.check{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid var(--line);font-size:.9rem;cursor:pointer}
+.check input{width:18px;height:18px;accent-color:var(--brand);flex:none}
+.colpick{display:flex;flex-wrap:wrap;gap:8px}
+.colpick label{cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.colpick input{accent-color:var(--brand)}
+.viewtog{display:flex;gap:4px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:3px}
+.viewtog button{padding:6px 10px;border-radius:8px;color:var(--mut);font-weight:700;font-size:.78rem}
+.viewtog button.on{background:var(--brand);color:#fff}
+.selrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.selrow select{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff;font-size:.83rem;max-width:46vw}
+.lrow{display:flex;align-items:center;gap:10px;background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:8px 12px;cursor:pointer}
 
 /* ficha */
 .fichahead{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
@@ -246,11 +258,14 @@ const ICONS = {
   link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7L12.5 18.5"/></svg>',
   xls:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6Z"/><path d="M9 12l6 6m0-6-6 6"/></svg>',
   cloud:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.9-8.9 6 6 0 0 1 11.7 1.6A4 4 0 0 1 17.5 18Z"/></svg>',
-  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"/></svg>'
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"/></svg>',
+  table:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 9v11M15 9v11"/></svg>'
 };
 /* ---------------- configuração / autenticação ---------------- */
 const SCOPES = ["User.Read","Files.ReadWrite.All"];
 const DEFAULT_FOLDER = "(RECURSOS HUMANOS APP)";
+const APP_VER = "1.1";
+let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
 
@@ -276,7 +291,7 @@ function showSetup(err){
 }
 function showLogin(){
   gate(`<div class="card"><div class="mark">RH</div><h1>Recursos Humanos</h1>
-    <p>Livion Solutions</p>
+    <p>Livion Solutions · v${APP_VER}</p>
     <button class="btn" onclick="A.entrar()">Entrar com Microsoft</button>
     <div class="tip"><a href="#" onclick="A.reconfig();return false">Alterar configuração</a></div></div>`);
 }
@@ -419,6 +434,17 @@ function busy(on){ document.getElementById("busy").classList.toggle("on",!!on); 
 function uid(){ return Math.random().toString(16).slice(2,10); }
 function nextFunId(){ const mx = DB.funcionarios.reduce((m,f)=>{const n=+String(f.id).replace(/\D/g,"");return n>m?n:m;},0); return "FUN"+String(mx+1).padStart(4,"0"); }
 function safeName(s){ return String(s||"").replace(/[<>:"/\\|?*]/g,"").replace(/\s+/g," ").trim(); }
+function fmtMask(v, kind){
+  const d = String(v||"").replace(/\D/g,"");
+  const m = kind==="cpf" ? "000.000.000-00"
+        : kind==="cnpj" ? "00.000.000/0000-00"
+        : kind==="tel"  ? (d.length>10 ? "(00) 00000-0000" : "(00) 0000-0000")
+        : null;
+  if(!m) return v;
+  let out="", i=0;
+  for(const ch of m){ if(i>=d.length) break; out += (ch==="0" ? d[i++] : ch); }
+  return out;
+}
 function getF(id){ return DB.funcionarios.find(f=>f.id===id); }
 function getProj(id){ return DB.projetos.find(p=>p.id===id); }
 function getCli(id){ return DB.clientes.find(c=>c.id===id); }
@@ -443,10 +469,11 @@ function avatarHtml(f, cls){
 }
 
 /* ---------------- navegação / render ---------------- */
-const S = { view:"dash", fichaId:null, tab:"pessoal", filtro:"Ativo", busca:"", projOpen:null };
+const S = { view:"dash", fichaId:null, tab:"pessoal", filtro:"Ativo", busca:"", projOpen:null, fCargo:"", fProj:"", cargoOpen:null, viewMode: localStorage.getItem("rh_view")||"cards" };
 const NAV = [
   {v:"dash",  l:"Início",       ic:"home"},
   {v:"func",  l:"Funcionários", ic:"team"},
+  {v:"tabela",l:"Tabela",       ic:"table"},
   {v:"proj",  l:"Projetos",     ic:"proj"},
   {v:"cargos",l:"Cargos",       ic:"cash"},
   {v:"mais",  l:"Mais",         ic:"more"},
@@ -456,6 +483,7 @@ function startApp(){
   document.getElementById("shell").classList.add("on");
   document.getElementById("uname").textContent = account.name || account.username;
   document.getElementById("uav").textContent = initials(account.name || account.username);
+  thumbUrl("logo.png").then(u=>{ if(u){ LOGO_URL=u; paintLogo(); } }).catch(()=>{});
   render();
 }
 function go(v){ S.view=v; if(v!=="ficha") S.fichaId=null; render(); window.scrollTo(0,0); }
@@ -470,10 +498,21 @@ function render(){
   else if(S.view==="func") html = vFunc();
   else if(S.view==="ficha") html = vFicha();
   else if(S.view==="proj") html = vProj();
+  else if(S.view==="tabela") html = vTabela();
   else if(S.view==="cargos") html = vCargos();
   else if(S.view==="mais") html = vMais();
   M.innerHTML = top + html;
   hydrateAvatars();
+  paintLogo();
+}
+function paintLogo(){
+  if(!LOGO_URL) return;
+  document.querySelectorAll(".mark").forEach(el=>{
+    el.style.backgroundImage = `url("${LOGO_URL}")`;
+    el.style.backgroundSize = "cover"; el.style.backgroundPosition = "center";
+    el.style.background = `url("${LOGO_URL}") center/cover no-repeat #fff`;
+    el.textContent = "";
+  });
 }
 
 /* ---------------- telas ---------------- */
@@ -519,18 +558,75 @@ function vFunc(){
   const chips = ["Ativo","Todos","Candidato","Demitido","Pediu Demissão"];
   const q = S.busca.toLowerCase();
   let list = DB.funcionarios.filter(f=> S.filtro==="Todos" || f.status===S.filtro);
-  if(q) list = DB.funcionarios.filter(f => (f.nome+" "+(f.cargo||"")+" "+(f.empresa||"")+" "+f.id).toLowerCase().includes(q));
+  if(S.fCargo) list = list.filter(f=>f.cargo===S.fCargo);
+  if(S.fProj) list = list.filter(f=>f.projetos.some(a=>a.projetoId===S.fProj && !a.fim));
+  if(q) list = list.filter(f => (f.nome+" "+(f.cargo||"")+" "+(f.empresa||"")+" "+f.id).toLowerCase().includes(q));
+  const cargosEx = [...new Set(DB.funcionarios.map(f=>f.cargo).filter(Boolean))].sort();
+  const cardHtml = f=>`<div class="pcard" onclick="A.abrirFicha('${f.id}')">${avatarHtml(f,"md")}
+      <div class="inf"><b>${esc(f.nome)}</b><span>${esc(f.cargo||"—")}${f.nivel?` · Nível ${esc(f.nivel)}`:""}</span><span>${esc(f.empresa||"")}</span></div>
+      ${sBadge(f.status)}</div>`;
+  const rowHtml = f=>`<div class="lrow" onclick="A.abrirFicha('${f.id}')">${avatarHtml(f,"md")}
+      <b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.9rem">${esc(f.nome)}</b>
+      <span style="color:var(--mut);font-size:.78rem;white-space:nowrap">${esc(f.cargo||"—")}</span>${sBadge(f.status)}</div>`;
   return `
   <div class="h1">Funcionários</div>
-  <div class="sub">${list.length} pessoa${list.length!==1?"s":""} ${q?`para “${esc(S.busca)}”`:S.filtro==="Todos"?"no total":`· ${esc(S.filtro)}`}</div>
+  <div class="sub">${list.length} pessoa${list.length!==1?"s":""}</div>
   <div class="search">${ICONS.search}<input placeholder="Buscar por nome, cargo, empresa…" value="${esc(S.busca)}" oninput="A.buscar(this.value)"></div>
-  <div class="chips">${chips.map(c=>`<button class="chip ${S.filtro===c&&!q?"on":""}" onclick="A.filtrar('${c}')">${c==="Todos"||c==="Pediu Demissão"?c:c+"s"}</button>`).join("")}</div>
-  <div class="plist">
-    ${list.map(f=>`<div class="pcard" onclick="A.abrirFicha('${f.id}')">${avatarHtml(f,"md")}
-      <div class="inf"><b>${esc(f.nome)}</b><span>${esc(f.cargo||"—")}${f.nivel?` · Nível ${esc(f.nivel)}`:""}</span><span>${esc(f.empresa||"")}</span></div>
-      ${sBadge(f.status)}</div>`).join("") || `<div class="empty card">Ninguém encontrado</div>`}
+  <div class="chips">${chips.map(c=>`<button class="chip ${S.filtro===c?"on":""}" onclick="A.filtrar('${c}')">${c==="Todos"||c==="Pediu Demissão"?c:c+"s"}</button>`).join("")}</div>
+  <div class="selrow">
+    <select onchange="A.fCargo(this.value)"><option value="">Cargo: todos</option>${cargosEx.map(c=>`<option ${S.fCargo===c?"selected":""} value="${esc(c)}">${esc(c)}</option>`).join("")}</select>
+    <select onchange="A.fProj(this.value)"><option value="">Projeto: todos</option>${DB.projetos.map(p=>`<option ${S.fProj===p.id?"selected":""} value="${p.id}">${esc(p.nome)}</option>`).join("")}</select>
+    <div class="viewtog"><button class="${S.viewMode!=="lista"?"on":""}" onclick="A.viewMode('cards')">⊞ Cartões</button><button class="${S.viewMode==="lista"?"on":""}" onclick="A.viewMode('lista')">☰ Lista</button></div>
   </div>
+  ${S.viewMode==="lista"
+    ? `<div class="grid" style="gap:8px">${list.map(rowHtml).join("") || `<div class="empty card">Ninguém encontrado</div>`}</div>`
+    : `<div class="plist">${list.map(cardHtml).join("") || `<div class="empty card">Ninguém encontrado</div>`}</div>`}
   <button class="fab" onclick="A.novoFunc()">${ICONS.plus} Novo</button>`;
+}
+
+const COLS = [
+  {k:"foto",l:"Foto"},{k:"nome",l:"Nome"},{k:"status",l:"Status"},{k:"cargo",l:"Cargo"},
+  {k:"salario",l:"Salário"},{k:"empresa",l:"Empresa"},{k:"banco",l:"Banco/Conta"},{k:"pix",l:"PIX"},
+  {k:"telefone",l:"Telefone"},{k:"cpf",l:"CPF"},{k:"email",l:"E-mail"},{k:"admissao",l:"Admissão"},{k:"projetos",l:"Projetos"}
+];
+function getCols(){
+  try{ const c = JSON.parse(localStorage.getItem("rh_cols")||"null"); if(Array.isArray(c)&&c.length) return c; }catch(e){}
+  return ["foto","nome","cargo","salario","pix"];
+}
+function colVal(f,k){
+  const b = f.bancos[0];
+  switch(k){
+    case "foto": return avatarHtml(f,"md");
+    case "nome": return `<b>${esc(f.nome)}</b>`;
+    case "status": return sBadge(f.status);
+    case "cargo": return esc(f.cargo||"—")+(f.nivel?` · N${esc(f.nivel)}`:"");
+    case "salario": return `<b>${money(salarioDe(f))}</b>`;
+    case "empresa": return nv(f.empresa);
+    case "banco": return b?`${esc(b.banco||"")}<br><small style="color:var(--mut)">Ag ${nv(b.agencia)} · ${nv(b.conta)}</small>`:"—";
+    case "pix": return f.bancos.filter(x=>x.chavePix).map(x=>`<b>${esc(x.chavePix)}</b> <small style="color:var(--mut)">${esc(x.tipoPix||"")}</small>`).join("<br>")||"—";
+    case "telefone": return nv(f.pessoal.telefonePessoal||f.pessoal.telefoneProfissional);
+    case "cpf": return nv(f.pessoal.cpf);
+    case "email": return nv(f.pessoal.emailProfissional||f.pessoal.emailPessoal);
+    case "admissao": return fmtDate(f.dataAdmissao);
+    case "projetos": return f.projetos.filter(a=>!a.fim).map(a=>esc(getProj(a.projetoId)?.nome||"")).join("<br>")||"—";
+  }
+  return "—";
+}
+function vTabela(){
+  const sel = getCols();
+  const cols = COLS.filter(c=>sel.includes(c.k));
+  const list = DB.funcionarios.filter(f=> S.filtro==="Todos" || f.status===S.filtro);
+  return `
+  <div class="h1">Tabela</div>
+  <div class="sub">Marque as colunas que quer ver — ex.: Nome + PIX para pagamentos</div>
+  <div class="chips">${["Ativo","Todos","Candidato","Demitido","Pediu Demissão"].map(c=>`<button class="chip ${S.filtro===c?"on":""}" onclick="A.filtrar('${c}')">${c==="Todos"||c==="Pediu Demissão"?c:c+"s"}</button>`).join("")}</div>
+  <div class="card" style="padding:12px 16px;margin-bottom:12px"><div class="colpick">
+    ${COLS.map(c=>`<label class="chip"><input type="checkbox" ${sel.includes(c.k)?"checked":""} onchange="A.toggleCol('${c.k}')">${c.l}</label>`).join("")}
+  </div></div>
+  <div class="card" style="overflow-x:auto;padding:10px">
+    <table class="tbl"><thead><tr>${cols.map(c=>`<th>${c.l}</th>`).join("")}</tr></thead>
+    <tbody>${list.map(f=>`<tr style="cursor:pointer" onclick="A.abrirFicha('${f.id}')">${cols.map(c=>`<td>${colVal(f,c.k)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length}" class="empty">Ninguém neste filtro</td></tr>`}</tbody></table>
+  </div>`;
 }
 
 function vFicha(){
@@ -595,7 +691,10 @@ function vFicha(){
           ${f.linkedin?`<a class="badge b-info" href="${esc(f.linkedin)}" target="_blank">LinkedIn ↗</a>`:""}
           <span class="badge b-gray">${f.id}</span></div>
       </div>
-      <button class="btn sec sm" onclick="A.editDados('${f.id}')">${ICONS.edit} Editar</button>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn sec sm" onclick="A.editDados('${f.id}')">${ICONS.edit} Editar</button>
+        <button class="btn danger sm" onclick="A.delFunc('${f.id}')">${ICONS.del} Excluir</button>
+      </div>
     </div>
     <div class="quick">
       <div class="q"><small>Admissão</small><b>${fmtDate(f.dataAdmissao)}</b></div>
@@ -608,12 +707,14 @@ function vFicha(){
   ${body}`;
 }
 function vProj(){
+  const ord = {"Em andamento":0,"Planejado":1,"Pausado":2,"Concluído":3,"Cancelado":4};
+  const projs = [...DB.projetos].sort((a,b)=>(ord[a.status]??1)-(ord[b.status]??1)||String(a.nome).localeCompare(String(b.nome)));
   return `
   <div class="h1">Projetos & Clientes</div>
   <div class="sub">${DB.projetos.length} projetos · ${DB.clientes.length} clientes</div>
   <div class="secttl"><h3>Projetos</h3><button class="btn sec sm" onclick="A.editProj(-1)">${ICONS.plus} Novo projeto</button></div>
   <div class="grid" style="margin-bottom:22px">
-    ${DB.projetos.map(p=>{
+    ${projs.map(p=>{
       const cl=getCli(p.clienteId);
       const equipe = DB.funcionarios.flatMap(f=>f.projetos.filter(a=>a.projetoId===p.id&&!a.fim).map(a=>({f,a})));
       const open = S.projOpen===p.id;
@@ -624,6 +725,7 @@ function vProj(){
           <span class="badge ${p.status==="Em andamento"?"b-ok":p.status==="Concluído"?"b-gray":"b-info"}">${esc(p.status||"—")}</span>
           <span class="badge b-info">${equipe.length} 👤</span>
           <button class="iconbtn" onclick="event.stopPropagation();A.editProj('${p.id}')">${ICONS.edit}</button>
+          <button class="iconbtn" onclick="event.stopPropagation();A.delProj('${p.id}')">${ICONS.del}</button>
         </div>
         ${open?`<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:6px">
           ${p.descricao?`<div style="font-size:.85rem;color:var(--mut);padding:6px 0">${esc(p.descricao)}</div>`:""}
@@ -641,7 +743,8 @@ function vProj(){
         <div style="flex:1;min-width:0"><b>${esc(c.nome)}</b>
         <div style="color:var(--mut);font-size:.8rem">${esc(c.empresaContratada||"")}${c.contato?` · ${esc(c.contato)}`:""}${c.telefone?` · ${esc(c.telefone)}`:""}</div></div>
         <span class="badge b-gray">${n} projeto${n!==1?"s":""}</span>
-        <button class="iconbtn" onclick="A.editCli('${c.id}')">${ICONS.edit}</button></div>`;}).join("") || `<div class="empty card">Nenhum cliente</div>`}
+        <button class="iconbtn" onclick="A.editCli('${c.id}')">${ICONS.edit}</button>
+        <button class="iconbtn" onclick="A.delCli('${c.id}')">${ICONS.del}</button></div>`;}).join("") || `<div class="empty card">Nenhum cliente</div>`}
   </div>`;
 }
 
@@ -651,21 +754,35 @@ function vCargos(){
   Object.values(grupos).forEach(g=>g.sort((a,b)=>String(a.nivel).localeCompare(String(b.nivel),undefined,{numeric:true})));
   return `
   <div class="h1">Cargos & Salários</div>
-  <div class="sub">Tabela salarial por cargo e nível</div>
+  <div class="sub">Clique em um cargo para ver os níveis</div>
   ${DB.regrasSalario.length?`<div class="card" style="margin-bottom:14px"><div class="secttl"><h3>Regras de referência</h3><button class="btn sec sm" onclick="A.editRegra(-1)">${ICONS.plus}</button></div>
     ${DB.regrasSalario.map((r,i)=>`<div class="rowitem"><div class="inf"><b>${esc(r.descricao)}</b><span>${r.observacao?esc(r.observacao):""}</span></div><b>${money(r.salario)}</b>
-    <button class="iconbtn" onclick="A.editRegra(${i})">${ICONS.edit}</button></div>`).join("")}</div>`:""}
-  <div class="card" style="overflow-x:auto">
-    <div class="secttl"><h3>Cargos</h3><button class="btn sec sm" onclick="A.editCargo(-1)">${ICONS.plus} Novo nível</button></div>
-    <table class="tbl"><thead><tr><th>Cargo</th><th>Nível</th><th>Salário</th><th>% aumento</th><th>Carga</th><th></th></tr></thead><tbody>
-    ${Object.entries(grupos).sort().map(([nome,nvs])=>nvs.map((c,i)=>{
-      const idx = DB.cargos.indexOf(c);
-      const nAtivos = i===0 ? DB.funcionarios.filter(f=>f.status==="Ativo"&&f.cargo===nome).length : null;
-      return `<tr>${i===0?`<td rowspan="${nvs.length}" style="font-weight:700">${esc(nome)}${nAtivos?`<div style="margin-top:3px"><span class="badge b-info">${nAtivos} ativo${nAtivos>1?"s":""}</span></div>`:""}</td>`:""}
-      <td>${nv(c.nivel)}</td><td style="font-weight:700">${money(c.salario)}</td>
-      <td>${c.aumento?Math.round(c.aumento*100)+"%":"—"}</td><td>${nv(c.cargaHoraria)}</td>
-      <td><button class="iconbtn" onclick="A.editCargo(${idx})">${ICONS.edit}</button></td></tr>`;
-    }).join("")).join("")}</tbody></table>
+    <button class="iconbtn" onclick="A.editRegra(${i})">${ICONS.edit}</button>
+    <button class="iconbtn" onclick="A.delRegra(${i})">${ICONS.del}</button></div>`).join("")}</div>`:""}
+  <div class="secttl"><h3>Cargos</h3><button class="btn sec sm" onclick="A.editCargo(-1)">${ICONS.plus} Novo cargo/nível</button></div>
+  <div class="grid">
+  ${Object.entries(grupos).sort().map(([nome,nvs])=>{
+    const open = S.cargoOpen===nome;
+    const nAtivos = DB.funcionarios.filter(f=>f.status==="Ativo"&&f.cargo===nome).length;
+    const sals = nvs.map(c=>c.salario).filter(v=>v!=null);
+    const faixa = sals.length ? (sals.length>1 ? money(Math.min(...sals))+" – "+money(Math.max(...sals)) : money(sals[0])) : "—";
+    const key = encodeURIComponent(nome);
+    return `<div class="card">
+      <div style="display:flex;align-items:center;gap:12px;cursor:pointer" onclick="A.toggleCargo('${key}')">
+        <div style="flex:1;min-width:0"><b>${esc(nome)}</b>
+          <div style="color:var(--mut);font-size:.8rem;margin-top:2px">${nvs.length} nível${nvs.length>1?"is":""} · ${faixa}</div></div>
+        ${nAtivos?`<span class="badge b-info">${nAtivos} ativo${nAtivos>1?"s":""}</span>`:""}
+        <span style="color:var(--mut);font-size:.8rem">${open?"▲":"▼"}</span>
+      </div>
+      ${open?`<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:4px">
+        ${nvs.map(c=>{ const idx = DB.cargos.indexOf(c);
+          return `<div class="rowitem"><div class="inf"><b>Nível ${nv(c.nivel)}</b>
+            <span>${c.aumento?"+"+Math.round(c.aumento*100)+"% sobre o anterior":""}${c.cargaHoraria?` · ${esc(c.cargaHoraria)}`:""}${c.observacao?` · ${esc(c.observacao)}`:""}</span></div>
+            <b>${money(c.salario)}</b>
+            <button class="iconbtn" onclick="A.editCargo(${idx})">${ICONS.edit}</button>
+            <button class="iconbtn" onclick="A.delCargo(${idx})">${ICONS.del}</button></div>`;}).join("")}
+      </div>`:""}
+    </div>`;}).join("")}
   </div>`;
 }
 
@@ -679,10 +796,11 @@ function vMais(){
     <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.abrirPasta()">${ICONS.cloud}<div class="inf"><b>Abrir pasta no OneDrive</b><span>Ver arquivos, fotos e backups</span></div></div>
     <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.copiarLink('${esc(cfgLink)}')">${ICONS.link}<div class="inf"><b>Link de configuração rápida</b><span>Copie e abra no celular para configurar automaticamente</span></div></div>
     <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.recarregar()">${ICONS.gear}<div class="inf"><b>Recarregar dados</b><span>Busca a versão mais recente do OneDrive</span></div></div>
+    <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.mudarLogo()">${ICONS.cam}<div class="inf"><b>Alterar logo</b><span>Troca o símbolo RH pela logo da sua empresa</span></div></div>
     <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.reconfig()">${ICONS.gear}<div class="inf"><b>Configuração</b><span>Alterar IDs do aplicativo ou pasta</span></div></div>
     <div class="card rowitem" style="cursor:pointer;border-bottom:none;color:var(--bad)" onclick="A.sair()">${ICONS.back}<div class="inf"><b>Sair</b><span style="color:var(--mut)">Desconectar conta Microsoft</span></div></div>
   </div>
-  <div class="sub" style="margin-top:16px;text-align:center">Última alteração: ${DB.meta.atualizadoEm?new Date(DB.meta.atualizadoEm).toLocaleString("pt-BR"):"—"}${DB.meta.atualizadoPor?` por ${esc(DB.meta.atualizadoPor)}`:""}</div>`;
+  <div class="sub" style="margin-top:16px;text-align:center">RH Livion v${APP_VER} · Última alteração: ${DB.meta.atualizadoEm?new Date(DB.meta.atualizadoEm).toLocaleString("pt-BR"):"—"}${DB.meta.atualizadoPor?` por ${esc(DB.meta.atualizadoPor)}`:""}</div>`;
 }
 
 /* ---------------- modal de formulário genérico ---------------- */
@@ -695,7 +813,7 @@ function openForm(title, fields, values, onSave){
       if(f.type==="select") inp = `<select id="ff_${f.k}">${(f.opts||[]).map(o=>{const[val,lab]=Array.isArray(o)?o:[o,o];return `<option value="${esc(val)}" ${String(v)===String(val)?"selected":""}>${esc(lab)}</option>`;}).join("")}</select>`;
       else if(f.type==="textarea") inp = `<textarea id="ff_${f.k}">${esc(v)}</textarea>`;
       else if(f.type==="file") inp = `<input type="file" id="ff_${f.k}" ${f.accept?`accept="${f.accept}"`:""}>`;
-      else inp = `<input type="${f.type||"text"}" id="ff_${f.k}" value="${esc(v)}" ${f.ph?`placeholder="${esc(f.ph)}"`:""}>`;
+      else inp = `<input type="${f.type||"text"}" id="ff_${f.k}" value="${esc(v)}" ${f.mask?`data-mask="${f.mask}"`:""} ${f.ph?`placeholder="${esc(f.ph)}"`:""}>`;
       return `<div class="fld ${f.full||f.type==="textarea"?"full":""}"><label>${esc(f.label)}${f.req?" *":""}</label>${inp}</div>`;
     }).join("")}
   </div><div class="acts"><button class="btn ghost" data-x>Cancelar</button><button class="btn" data-ok>Salvar</button></div></div>`;
@@ -714,6 +832,8 @@ function openForm(title, fields, values, onSave){
     if(ok!==false){ ov.remove(); render(); }
     else ov.querySelector("[data-ok]").disabled = false;
   };
+  ov.addEventListener("input", e=>{ const k = e.target.dataset ? e.target.dataset.mask : ""; if(k) e.target.value = fmtMask(e.target.value, k); });
+  return ov;
 }
 function confirmar(msg, fn){
   const ov = document.createElement("div"); ov.className="overlay";
@@ -745,6 +865,33 @@ A.abrirFicha = (id, tab)=>{ S.fichaId=id; S.tab=tab||"pessoal"; S.view="ficha"; 
 A.buscar = v=>{ S.busca=v; const l=document.activeElement; render(); const inp=document.querySelector(".search input"); if(inp){inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length);} };
 A.filtrar = c=>{ S.filtro=c; S.busca=""; render(); };
 A.toggleProj = id=>{ S.projOpen = S.projOpen===id?null:id; render(); };
+A.toggleCargo = key=>{ const n = decodeURIComponent(key); S.cargoOpen = S.cargoOpen===n?null:n; render(); };
+A.viewMode = v=>{ S.viewMode=v; localStorage.setItem("rh_view",v); render(); };
+A.fCargo = v=>{ S.fCargo=v; render(); };
+A.fProj = v=>{ S.fProj=v; render(); };
+A.toggleCol = k=>{ const c=getCols(); const i=c.indexOf(k); if(i>=0)c.splice(i,1); else c.push(k); localStorage.setItem("rh_cols",JSON.stringify(c)); render(); };
+A.delFunc = id=>{ const f=getF(id); confirmar(`Excluir ${f.nome} do banco de dados? A pasta com fotos e documentos será mantida no OneDrive.`, async ()=>{ DB.funcionarios = DB.funcionarios.filter(x=>x.id!==id); if(await saveDB()){ toast("✅ Excluído"); go('func'); } }); };
+A.delProj = id=>{ const p=getProj(id); confirmar(`Excluir o projeto “${p.nome}”? As alocações dele também serão removidas.`, async ()=>{ DB.projetos = DB.projetos.filter(x=>x.id!==id); DB.funcionarios.forEach(f=>f.projetos = f.projetos.filter(a=>a.projetoId!==id)); if(await saveDB()) toast("✅ Excluído"); }); };
+A.delCli = id=>{ const c=getCli(id); const n=DB.projetos.filter(p=>p.clienteId===id).length; confirmar(`Excluir o cliente “${c.nome}”?${n?` ${n} projeto(s) ficarão sem cliente.`:""}`, async ()=>{ DB.clientes = DB.clientes.filter(x=>x.id!==id); if(await saveDB()) toast("✅ Excluído"); }); };
+A.delCargo = i=> confirmar(`Excluir o nível ${DB.cargos[i]?.nivel||""} de ${DB.cargos[i]?.cargo||"cargo"}?`, async ()=>{ DB.cargos.splice(i,1); if(await saveDB()) toast("✅ Excluído"); });
+A.delRegra = i=> confirmar("Excluir esta regra de referência?", async ()=>{ DB.regrasSalario.splice(i,1); if(await saveDB()) toast("✅ Excluído"); });
+A.mudarLogo = ()=>{
+  const inp = document.getElementById("fileGen");
+  inp.accept = "image/*"; inp.value = "";
+  inp.onchange = async ()=>{
+    const file = inp.files[0]; if(!file) return;
+    busy(true);
+    try{
+      const blob = await resizeImg(file, 512, .9);
+      await uploadFile("logo.png", blob, "image/png");
+      thumbCache.delete("logo.png");
+      toast("✅ Logo enviada! Pode levar alguns segundos para aparecer.");
+      setTimeout(async ()=>{ LOGO_URL = await thumbUrl("logo.png"); paintLogo(); }, 3000);
+    }catch(e){ toast("❌ "+e.message); }
+    busy(false);
+  };
+  inp.click();
+};
 A.abrirArq = async (fid, rel)=>{ busy(true); try{ const f=getF(fid); const u = await fileUrl(`Funcionarios/${f.pasta}/${rel}`); window.open(u,"_blank"); }catch(e){ toast("❌ Arquivo não encontrado no OneDrive"); } busy(false); };
 
 /* --- funcionário: dados --- */
@@ -778,19 +925,19 @@ A.editNotas = id=>{ const f=getF(id); openForm("Anotações e avaliação", [
     {k:"observacoes", label:"Observações gerais", type:"textarea"},
   ], f, async v=>{ Object.assign(f, v); if(await saveDB()) toast("✅ Salvo"); }); };
 A.editPessoal = id=>{ const f=getF(id); openForm("Dados pessoais", [
-    {k:"telefonePessoal", label:"Telefone pessoal", ph:"(11) 99999-9999"},
-    {k:"telefoneProfissional", label:"Telefone profissional"},
+    {k:"telefonePessoal", label:"Telefone pessoal", mask:"tel", ph:"(11) 99999-9999"},
+    {k:"telefoneProfissional", label:"Telefone profissional", mask:"tel"},
     {k:"emailPessoal", label:"E-mail pessoal", type:"email"},
     {k:"emailProfissional", label:"E-mail profissional", type:"email"},
     {k:"endereco", label:"Endereço", full:1},
     {k:"nascimento", label:"Data de nascimento", type:"date"},
-    {k:"cpf", label:"CPF"}, {k:"rg", label:"RG"},
+    {k:"cpf", label:"CPF", mask:"cpf"}, {k:"rg", label:"RG"},
     {k:"estadoCivil", label:"Estado civil", type:"select", opts:[["",""],"Solteiro(a)","Casado(a)","União estável","Divorciado(a)","Viúvo(a)"]},
     {k:"tipoSanguineo", label:"Tipo sanguíneo", type:"select", opts:[["",""],"A+","A-","B+","B-","AB+","AB-","O+","O-"]},
     {k:"filhos", label:"Qtde. de filhos", type:"number"},
     {k:"idadesFilhos", label:"Idades dos filhos"},
     {k:"emergenciaNome", label:"Emergência — nome"},
-    {k:"emergenciaTelefone", label:"Emergência — telefone"},
+    {k:"emergenciaTelefone", label:"Emergência — telefone", mask:"tel"},
     {k:"emergenciaParentesco", label:"Emergência — parentesco"},
     {k:"doencas", label:"Possui doenças?", type:"select", opts:[["",""],"Não","Sim"]},
     {k:"qualDoenca", label:"Qual doença?"},
@@ -803,13 +950,17 @@ A.editPessoal = id=>{ const f=getF(id); openForm("Dados pessoais", [
 
 /* --- bancos --- */
 A.editBanco = (id,i)=>{ const f=getF(id); const b = i>=0?f.bancos[i]:{};
-  openForm(i>=0?"Editar conta":"Nova conta bancária", [
+  const ov = openForm(i>=0?"Editar conta":"Nova conta bancária", [
     {k:"banco", label:"Banco", req:1, full:1, ph:"(341) Itaú Unibanco S.A."},
     {k:"agencia", label:"Agência"}, {k:"conta", label:"Conta"},
     {k:"tipoPix", label:"Tipo de PIX", type:"select", opts:[["",""],"CPF","CNPJ","E-mail","Telefone","Chave aleatória"]},
     {k:"chavePix", label:"Chave PIX"},
     {k:"observacoes", label:"Observações", type:"textarea"},
-  ], b, async v=>{ if(i>=0) Object.assign(f.bancos[i],v); else f.bancos.push(v); if(await saveDB()) toast("✅ Salvo"); }); };
+  ], b, async v=>{ if(i>=0) Object.assign(f.bancos[i],v); else f.bancos.push(v); if(await saveDB()) toast("✅ Salvo"); });
+  const tp = ov.querySelector("#ff_tipoPix"), ck = ov.querySelector("#ff_chavePix");
+  const mp = {"CPF":"cpf","CNPJ":"cnpj","Telefone":"tel"};
+  const updMask = ()=>{ ck.dataset.mask = mp[tp.value]||""; if(ck.dataset.mask && ck.value) ck.value = fmtMask(ck.value, ck.dataset.mask); };
+  tp.addEventListener("change", updMask); updMask(); };
 A.delBanco = (id,i)=> confirmar("Excluir esta conta bancária?", async ()=>{ getF(id).bancos.splice(i,1); await saveDB(); });
 
 /* --- documentos --- */
@@ -907,14 +1058,33 @@ A.editAloc = (id,i)=>{ const f=getF(id); const a=i>=0?f.projetos[i]:{};
 A.delAloc = (id,i)=> confirmar("Remover esta alocação?", async ()=>{ getF(id).projetos.splice(i,1); await saveDB(); });
 A.alocarNoProj = pid=>{
   const ativos = DB.funcionarios.filter(f=>f.status==="Ativo");
-  openForm("Alocar funcionário", [
-    {k:"fid", label:"Funcionário", type:"select", req:1, full:1, opts:ativos.map(f=>[f.id, f.nome])},
-    ...fAloc(true)
-  ], {}, async v=>{
-    const f=getF(v.fid);
-    f.projetos.push({projetoId:pid, funcao:v.funcao, cargo:f.cargo, inicio:v.inicio, fim:v.fim, observacoes:v.observacoes});
-    if(await saveDB()) toast("✅ "+f.nome+" alocado");
-  });
+  const jaNoProj = new Set(ativos.filter(f=>f.projetos.some(a=>a.projetoId===pid&&!a.fim)).map(f=>f.id));
+  const cargos = [...new Set(ativos.map(f=>f.cargo).filter(Boolean))].sort();
+  const rows = fs => fs.map(f=>`<label class="check"><input type="checkbox" value="${f.id}" ${jaNoProj.has(f.id)?"disabled checked":""}>
+      <b style="flex:1">${esc(f.nome)}</b><span style="color:var(--mut);font-size:.76rem">${jaNoProj.has(f.id)?"já no projeto":esc(f.cargo||"")}</span></label>`).join("") || `<div class="empty">Ninguém neste cargo</div>`;
+  const ov = document.createElement("div"); ov.className="overlay";
+  ov.innerHTML = `<div class="modal"><h3>Alocar funcionários</h3>
+    <div class="fld" style="margin-bottom:10px"><label>1. Filtrar por cargo</label>
+      <select id="al_cargo"><option value="">Todos os cargos</option>${cargos.map(c=>`<option>${esc(c)}</option>`).join("")}</select></div>
+    <div class="fld"><label>2. Selecione um ou vários</label></div>
+    <div id="al_lista" style="max-height:36dvh;overflow:auto;border:1.5px solid var(--line);border-radius:11px;padding:2px 10px">${rows(ativos)}</div>
+    <div class="fgrid" style="margin-top:12px">
+      <div class="fld"><label>Função no projeto</label><input id="al_funcao"></div>
+      <div class="fld"><label>Data de início</label><input type="date" id="al_inicio"></div>
+    </div>
+    <div class="acts"><button class="btn ghost" data-x>Cancelar</button><button class="btn" data-ok>Alocar selecionados</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener("click", e=>{ if(e.target===ov) ov.remove(); });
+  ov.querySelector("[data-x]").onclick = ()=>ov.remove();
+  ov.querySelector("#al_cargo").onchange = e=>{ const c=e.target.value; ov.querySelector("#al_lista").innerHTML = rows(c?ativos.filter(f=>f.cargo===c):ativos); };
+  ov.querySelector("[data-ok]").onclick = async ()=>{
+    const ids = [...ov.querySelectorAll("#al_lista input:checked:not(:disabled)")].map(i=>i.value);
+    if(!ids.length){ toast("Selecione pelo menos um funcionário"); return; }
+    const funcao = ov.querySelector("#al_funcao").value.trim()||null;
+    const inicio = ov.querySelector("#al_inicio").value||null;
+    ids.forEach(id=>{ const f=getF(id); f.projetos.push({projetoId:pid, funcao, cargo:f.cargo, inicio, fim:null, observacoes:null}); });
+    if(await saveDB()){ ov.remove(); toast(`✅ ${ids.length} funcionário(s) alocado(s)`); render(); }
+  };
 };
 
 /* --- clientes / projetos --- */
@@ -922,8 +1092,8 @@ A.editCli = id=>{ const c = id!==-1?getCli(id):null;
   openForm(c?"Editar cliente":"Novo cliente", [
     {k:"nome", label:"Nome do cliente", req:1},
     {k:"empresaContratada", label:"Empresa contratada", type:"select", opts:[["",""],...empresaOpts()]},
-    {k:"cnpj", label:"CNPJ"}, {k:"uf", label:"UF"}, {k:"cidade", label:"Cidade"},
-    {k:"contato", label:"Contato principal"}, {k:"telefone", label:"Telefone"},
+    {k:"cnpj", label:"CNPJ", mask:"cnpj"}, {k:"uf", label:"UF"}, {k:"cidade", label:"Cidade"},
+    {k:"contato", label:"Contato principal"}, {k:"telefone", label:"Telefone", mask:"tel"},
     {k:"email", label:"E-mail", type:"email"},
     {k:"observacoes", label:"Observações", type:"textarea"},
   ], c||{}, async v=>{
