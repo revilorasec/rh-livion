@@ -334,11 +334,13 @@ async function resolveFolder(){
     : { driveId: hit.parentReference.driveId, id: hit.id };
 }
 async function loadDB(){
-  const meta = await gjson(iPath("dados.json")+"?$select=eTag,id,@microsoft.graph.downloadUrl");
+  const meta = await gjson(iPath("dados.json")+"?$select=eTag,id");
   dbEtag = meta.eTag;
-  const r = await fetch(meta["@microsoft.graph.downloadUrl"]);
+  const r = await gfetch(iPath("dados.json")+"/content");
+  if(!r.ok) throw new Error("Não foi possível ler o dados.json na pasta do OneDrive ("+r.status+").");
   rawSnapshot = await r.text();
-  DB = JSON.parse(rawSnapshot);
+  try{ DB = JSON.parse(rawSnapshot); }
+  catch(e){ throw new Error("O arquivo dados.json existe mas não é um JSON válido. Restaure o backup da pasta Backup."); }
 }
 async function saveDB(){
   busy(true);
