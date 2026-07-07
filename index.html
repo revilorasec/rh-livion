@@ -53,7 +53,7 @@ img{display:block}
   .mtop b{font-size:1rem}
   .mtop small{display:block;color:var(--mut);font-size:.7rem}
   .bnav{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
-  .bnav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.64rem;font-weight:600;color:var(--mut);padding:4px 10px;border-radius:10px;min-width:58px}
+  .bnav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.6rem;font-weight:600;color:var(--mut);padding:4px 5px;border-radius:10px;min-width:42px}
   .bnav button svg{width:22px;height:22px}
   .bnav button.on{color:var(--brand)}
 }
@@ -259,12 +259,13 @@ const ICONS = {
   xls:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6Z"/><path d="M9 12l6 6m0-6-6 6"/></svg>',
   cloud:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.9-8.9 6 6 0 0 1 11.7 1.6A4 4 0 0 1 17.5 18Z"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"/></svg>',
-  table:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 9v11M15 9v11"/></svg>'
+  table:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 9v11M15 9v11"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>'
 };
 /* ---------------- configuração / autenticação ---------------- */
 const SCOPES = ["User.Read","Files.ReadWrite.All"];
 const DEFAULT_FOLDER = "(RECURSOS HUMANOS APP)";
-const APP_VER = "1.2";
+const APP_VER = "1.3";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -356,6 +357,7 @@ async function loadDB(){
   rawSnapshot = await r.text();
   try{ DB = JSON.parse(rawSnapshot); }
   catch(e){ throw new Error("O arquivo dados.json existe mas não é um JSON válido. Restaure o backup da pasta Backup."); }
+  normalizeDB();
 }
 async function saveDB(){
   busy(true);
@@ -474,6 +476,7 @@ const NAV = [
   {v:"dash",  l:"Início",       ic:"home"},
   {v:"func",  l:"Funcionários", ic:"team"},
   {v:"tabela",l:"Tabela",       ic:"table"},
+  {v:"mapa",  l:"Mapa",         ic:"pin"},
   {v:"proj",  l:"Projetos",     ic:"proj"},
   {v:"cargos",l:"Cargos",       ic:"cash"},
   {v:"mais",  l:"Mais",         ic:"more"},
@@ -499,11 +502,13 @@ function render(){
   else if(S.view==="ficha") html = vFicha();
   else if(S.view==="proj") html = vProj();
   else if(S.view==="tabela") html = vTabela();
+  else if(S.view==="mapa") html = vMapa();
   else if(S.view==="cargos") html = vCargos();
   else if(S.view==="mais") html = vMais();
   M.innerHTML = top + html;
   hydrateAvatars();
   paintLogo();
+  if(S.view==="mapa") initMapa();
 }
 function paintLogo(){
   if(!LOGO_URL) return;
@@ -642,9 +647,19 @@ function vFicha(){
   let body = "";
   if(S.tab==="pessoal"){
     const p = f.pessoal;
-    const its = [["Telefone pessoal",p.telefonePessoal],["Telefone profissional",p.telefoneProfissional],["E-mail pessoal",p.emailPessoal],["E-mail profissional",p.emailProfissional],["Endereço",p.endereco],["Nascimento",p.nascimento?`${fmtDate(p.nascimento)} (${idade(p.nascimento)} anos)`:null],["CPF",p.cpf],["RG",p.rg],["Estado civil",p.estadoCivil],["Filhos",p.filhos],["Idades dos filhos",p.idadesFilhos],["Emergência — nome",p.emergenciaNome],["Emergência — telefone",p.emergenciaTelefone],["Emergência — parentesco",p.emergenciaParentesco],["Doenças?",p.doencas],["Qual doença",p.qualDoenca],["Usa medicamentos?",p.medicamentos],["Quais medicamentos",p.quaisMedicamentos],["Alergias",p.alergias],["Tipos de alergias",p.tiposAlergias],["Tipo sanguíneo",p.tipoSanguineo],["Observações",p.observacoes]];
+    const its = [["Telefone pessoal",telLink(p.telefonePessoal)],["Telefone profissional",telLink(p.telefoneProfissional)],["E-mail pessoal",mailLink(p.emailPessoal)],["E-mail profissional",mailLink(p.emailProfissional)],["Endereço",mapLink(p.endereco)],["Nascimento",p.nascimento?`${fmtDate(p.nascimento)} (${idade(p.nascimento)} anos)`:"—"],["CPF",nv(p.cpf)],["RG",nv(p.rg)],["Estado civil",nv(p.estadoCivil)],["Tipo sanguíneo",nv(p.tipoSanguineo)],["Observações",nv(p.observacoes)]];
+    const sau = (tipo,titulo)=>`<div style="flex:1;min-width:200px"><div class="secttl"><h3 style="font-size:.9rem">${titulo} ${p.saude[tipo].length?`<span class="badge b-warn">${p.saude[tipo].length}</span>`:'<span class="badge b-ok">não</span>'}</h3><button class="btn sec sm" onclick="A.addSaude('${f.id}','${tipo}')">${ICONS.plus}</button></div>
+      ${p.saude[tipo].length?p.saude[tipo].map((x,i)=>`<div class="rowitem"><div class="inf"><b>${esc(x)}</b></div><button class="iconbtn" onclick="A.delSaude('${f.id}','${tipo}',${i})">${ICONS.del}</button></div>`).join(""):`<div class="empty" style="padding:8px">Nenhum registro</div>`}</div>`;
     body = `<div class="card"><div class="secttl"><h3>Dados pessoais</h3><button class="btn sec sm" onclick="A.editPessoal('${f.id}')">${ICONS.edit} Editar</button></div>
-      <div class="dl">${its.map(([l,v])=>`<div class="it"><small>${l}</small><span>${nv(v)}</span></div>`).join("")}</div></div>`;
+      <div class="dl">${its.map(([l,v])=>`<div class="it"><small>${l}</small><span>${v}</span></div>`).join("")}</div></div>
+    <div class="card" style="margin-top:12px"><div class="secttl"><h3>Dependentes ${p.dependentes.length?`<span class="badge b-info">${p.dependentes.length}</span>`:""}</h3><button class="btn sec sm" onclick="A.editDep('${f.id}',-1)">${ICONS.plus} Adicionar</button></div>
+      ${p.dependentes.length?p.dependentes.map((d,i)=>`<div class="rowitem"><div class="inf"><b>${esc(d.nome||d.parentesco||"—")}</b><span>${esc(d.parentesco||"")}${d.idade?` · ${esc(d.idade)} ano(s)`:""}</span></div>
+        <button class="iconbtn" onclick="A.editDep('${f.id}',${i})">${ICONS.edit}</button><button class="iconbtn" onclick="A.delDep('${f.id}',${i})">${ICONS.del}</button></div>`).join(""):`<div class="empty">Sem dependentes</div>`}</div>
+    <div class="card" style="margin-top:12px"><div class="secttl"><h3>Contatos de emergência</h3><button class="btn sec sm" onclick="A.editEmg('${f.id}',-1)">${ICONS.plus} Adicionar</button></div>
+      ${p.emergencias.length?p.emergencias.map((e,i)=>`<div class="rowitem"><div class="inf"><b>${esc(e.nome||"—")}</b><span>${telLink(e.telefone)}${e.parentesco?` · ${esc(e.parentesco)}`:""}</span></div>
+        <button class="iconbtn" onclick="A.editEmg('${f.id}',${i})">${ICONS.edit}</button><button class="iconbtn" onclick="A.delEmg('${f.id}',${i})">${ICONS.del}</button></div>`).join(""):`<div class="empty">Nenhum contato de emergência</div>`}</div>
+    <div class="card" style="margin-top:12px"><div class="secttl"><h3>Saúde</h3></div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap">${sau("doencas","Doenças")}${sau("medicamentos","Medicamentos")}${sau("alergias","Alergias")}</div></div>`;
   }
   if(S.tab==="banco"){
     body = `<div class="card"><div class="secttl"><h3>Contas bancárias e PIX</h3><button class="btn sec sm" onclick="A.editBanco('${f.id}',-1)">${ICONS.plus} Adicionar</button></div>
@@ -725,8 +740,8 @@ function vProj(){
       const open = S.projOpen===p.id;
       return `<div class="card">
         <div style="display:flex;align-items:center;gap:12px;cursor:pointer" onclick="A.toggleProj('${p.id}')">
-          <div style="flex:1;min-width:0"><b>${esc(p.nome)}</b>
-          <div style="color:var(--mut);font-size:.8rem;margin-top:2px">${esc(cl?.nome||"Sem cliente")}${p.inicio?` · desde ${fmtDate(p.inicio)}`:""}</div></div>
+          <div style="flex:1;min-width:0"><b>${p.icone?esc(p.icone)+" ":""}${esc(p.nome)}</b>
+          <div style="color:var(--mut);font-size:.8rem;margin-top:2px">${esc(cl?.nome||"Sem cliente")}${p.local?` · ${esc(p.local)}`:""}${p.inicio?` · desde ${fmtDate(p.inicio)}`:""}</div></div>
           <span class="badge ${p.status==="Em andamento"?"b-ok":p.status==="Concluído"?"b-gray":"b-info"}">${esc(p.status||"—")}</span>
           <span class="badge b-info">${equipe.length} 👤</span>
           <button class="iconbtn" onclick="event.stopPropagation();A.editProj('${p.id}')">${ICONS.edit}</button>
@@ -801,6 +816,8 @@ function vMais(){
     <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.abrirPasta()">${ICONS.cloud}<div class="inf"><b>Abrir pasta no OneDrive</b><span>Ver arquivos, fotos e backups</span></div></div>
     <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.copiarLink('${esc(cfgLink)}')">${ICONS.link}<div class="inf"><b>Link de configuração rápida</b><span>Copie e abra no celular para configurar automaticamente</span></div></div>
     <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.recarregar()">${ICONS.gear}<div class="inf"><b>Recarregar dados</b><span>Busca a versão mais recente do OneDrive</span></div></div>
+    <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="go('cargos')">${ICONS.cash}<div class="inf"><b>Cargos, níveis e salários</b><span>Defina os níveis e o salário de cada um — usado automaticamente nos funcionários</span></div></div>
+    <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.gerirEmpresas()">${ICONS.proj}<div class="inf"><b>Empresas contratantes</b><span>Adicionar ou excluir empresas usadas nos cadastros</span></div></div>
     <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.mudarLogo()">${ICONS.cam}<div class="inf"><b>Alterar logo</b><span>Troca o símbolo RH pela logo da sua empresa</span></div></div>
     <div class="card rowitem" style="cursor:pointer;border-bottom:none" onclick="A.reconfig()">${ICONS.gear}<div class="inf"><b>Configuração</b><span>Alterar IDs do aplicativo ou pasta</span></div></div>
     <div class="card rowitem" style="cursor:pointer;border-bottom:none;color:var(--bad)" onclick="A.sair()">${ICONS.back}<div class="inf"><b>Sair</b><span style="color:var(--mut)">Desconectar conta Microsoft</span></div></div>
@@ -901,7 +918,7 @@ A.abrirArq = async (fid, rel)=>{ busy(true); try{ const f=getF(fid); const u = a
 
 /* --- funcionário: dados --- */
 const cargosOpts = ()=> [...new Set(DB.cargos.map(c=>c.cargo))].sort().map(c=>[c,c]);
-const empresaOpts = ()=> [...new Set(DB.funcionarios.map(f=>f.empresa).filter(Boolean))].sort().map(e=>[e,e]);
+const empresaOpts = ()=> (DB.empresas||[]).map(e=>[e,e]);
 const fDados = f => [
   {k:"nome", label:"Nome completo", req:1, full:1},
   {k:"status", label:"Status", type:"select", opts:STATUS_OPTS},
@@ -939,19 +956,25 @@ A.editPessoal = id=>{ const f=getF(id); openForm("Dados pessoais", [
     {k:"cpf", label:"CPF", mask:"cpf"}, {k:"rg", label:"RG"},
     {k:"estadoCivil", label:"Estado civil", type:"select", opts:[["",""],"Solteiro(a)","Casado(a)","União estável","Divorciado(a)","Viúvo(a)"]},
     {k:"tipoSanguineo", label:"Tipo sanguíneo", type:"select", opts:[["",""],"A+","A-","B+","B-","AB+","AB-","O+","O-"]},
-    {k:"filhos", label:"Qtde. de filhos", type:"number"},
-    {k:"idadesFilhos", label:"Idades dos filhos"},
-    {k:"emergenciaNome", label:"Emergência — nome"},
-    {k:"emergenciaTelefone", label:"Emergência — telefone", mask:"tel"},
-    {k:"emergenciaParentesco", label:"Emergência — parentesco"},
-    {k:"doencas", label:"Possui doenças?", type:"select", opts:[["",""],"Não","Sim"]},
-    {k:"qualDoenca", label:"Qual doença?"},
-    {k:"medicamentos", label:"Usa medicamentos?", type:"select", opts:[["",""],"Não","Sim"]},
-    {k:"quaisMedicamentos", label:"Quais medicamentos?"},
-    {k:"alergias", label:"Alergias?", type:"select", opts:[["",""],"Não","Sim"]},
-    {k:"tiposAlergias", label:"Tipos de alergias"},
     {k:"observacoes", label:"Observações", type:"textarea"},
   ], f.pessoal, async v=>{ Object.assign(f.pessoal, v); if(await saveDB()) toast("✅ Salvo"); }); };
+A.editDep = (id,i)=>{ const f=getF(id); const d = i>=0?f.pessoal.dependentes[i]:{};
+  openForm(i>=0?"Editar dependente":"Novo dependente", [
+    {k:"parentesco", label:"Parentesco", type:"select", opts:["Filho(a)","Cônjuge","Enteado(a)","Pai","Mãe","Outro"]},
+    {k:"nome", label:"Nome"},
+    {k:"idade", label:"Idade", type:"number"},
+  ], d, async v=>{ if(i>=0) Object.assign(f.pessoal.dependentes[i],v); else f.pessoal.dependentes.push(v); if(await saveDB()) toast("✅ Salvo"); }); };
+A.delDep = (id,i)=> confirmar("Remover este dependente?", async ()=>{ getF(id).pessoal.dependentes.splice(i,1); await saveDB(); });
+A.editEmg = (id,i)=>{ const f=getF(id); const e = i>=0?f.pessoal.emergencias[i]:{};
+  openForm(i>=0?"Editar contato":"Novo contato de emergência", [
+    {k:"nome", label:"Nome", req:1},
+    {k:"telefone", label:"Telefone", mask:"tel"},
+    {k:"parentesco", label:"Parentesco"},
+  ], e, async v=>{ if(i>=0) Object.assign(f.pessoal.emergencias[i],v); else f.pessoal.emergencias.push(v); if(await saveDB()) toast("✅ Salvo"); }); };
+A.delEmg = (id,i)=> confirmar("Remover este contato?", async ()=>{ getF(id).pessoal.emergencias.splice(i,1); await saveDB(); });
+A.addSaude = (id,tipo)=>{ const f=getF(id); const lbl = {doencas:"Doença",medicamentos:"Medicamento",alergias:"Alergia"}[tipo];
+  openForm("Adicionar "+lbl, [{k:"v", label:lbl, req:1, full:1}], {}, async v=>{ f.pessoal.saude[tipo].push(v.v); if(await saveDB()) toast("✅ Salvo"); }); };
+A.delSaude = (id,tipo,i)=> confirmar("Remover este item?", async ()=>{ getF(id).pessoal.saude[tipo].splice(i,1); await saveDB(); });
 
 /* --- bancos --- */
 A.editBanco = (id,i)=>{ const f=getF(id); const b = i>=0?f.bancos[i]:{};
@@ -1110,6 +1133,8 @@ A.editProj = id=>{ const p = id!==-1?getProj(id):null;
     {k:"nome", label:"Nome do projeto", req:1, full:1},
     {k:"clienteId", label:"Cliente", type:"select", opts:[["",""],...DB.clientes.map(c=>[c.id,c.nome])]},
     {k:"status", label:"Status", type:"select", opts:["Em andamento","Planejado","Pausado","Concluído","Cancelado"]},
+    {k:"icone", label:"Ícone no mapa", type:"select", opts:["📌","🏗️","📡","💻","🛠️","🏢","🚚","🔧","📞","⚡","🌐","🏭"]},
+    {k:"local", label:"Local (cidade ou endereço)", ph:"ex.: Belém, PA"},
     {k:"inicio", label:"Início", type:"date"}, {k:"fim", label:"Término", type:"date"},
     {k:"descricao", label:"Descrição", type:"textarea"},
     {k:"observacoes", label:"Observações", type:"textarea"},
@@ -1160,6 +1185,147 @@ A.exportar = async ()=>{
     XLSX.writeFile(wb, `RH Livion ${new Date().toISOString().slice(0,10)}.xlsx`);
     toast("✅ Planilha gerada");
   }catch(e){ busy(false); toast("❌ "+e.message); }
+};
+
+/* ---------------- normalização de dados (migra estruturas antigas) ---------------- */
+function normalizeDB(){
+  if(!Array.isArray(DB.empresas)) DB.empresas = [...new Set(DB.funcionarios.map(f=>f.empresa).filter(Boolean))].sort();
+  DB.funcionarios.forEach(f=>{
+    const p = f.pessoal || (f.pessoal = {});
+    if(!Array.isArray(p.dependentes)){
+      p.dependentes = [];
+      if(p.filhos || p.idadesFilhos) p.dependentes.push({parentesco:"Filho(a)", nome:null, idade:p.idadesFilhos||null});
+    }
+    if(!Array.isArray(p.emergencias)){
+      p.emergencias = p.emergenciaNome ? [{nome:p.emergenciaNome, telefone:p.emergenciaTelefone||null, parentesco:p.emergenciaParentesco||null}] : [];
+    }
+    if(!p.saude){
+      p.saude = {doencas:[], medicamentos:[], alergias:[]};
+      if(p.qualDoenca) p.saude.doencas.push(p.qualDoenca);
+      if(p.quaisMedicamentos) p.saude.medicamentos.push(p.quaisMedicamentos);
+      if(p.tiposAlergias) p.saude.alergias.push(p.tiposAlergias);
+    }
+  });
+  DB.projetos.forEach(p=>{ if(p.icone===undefined) p.icone="📌"; if(p.local===undefined) p.local=null; });
+}
+
+/* ---------------- links clicáveis ---------------- */
+function telLink(t){ if(!t) return "—"; const d=String(t).replace(/\D/g,""); if(!d) return esc(t); const full = d.length<=11 ? "55"+d : d; return `<a href="https://wa.me/${full}" target="_blank" title="Abrir no WhatsApp">${esc(t)} 💬</a>`; }
+function mailLink(m){ return m ? `<a href="mailto:${esc(m)}">${esc(m)}</a>` : "—"; }
+function mapLink(e){ return e ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e)}" target="_blank" title="Abrir no mapa">${esc(e)} 📍</a>` : "—"; }
+
+/* ---------------- mapa da equipe (Leaflet + OpenStreetMap) ---------------- */
+let MAP = null, lastGeo = 0;
+async function ensureLeaflet(){
+  if(window.L) return;
+  if(!document.getElementById("lfcss")){
+    const l = document.createElement("link"); l.id="lfcss"; l.rel="stylesheet";
+    l.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+    l.onerror = ()=>{ l.onerror=null; l.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; };
+    document.head.appendChild(l);
+  }
+  await loadScript([
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js",
+    "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+    "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
+  ]);
+}
+function geoCache(){ try{ return JSON.parse(localStorage.getItem("rh_geo")||"{}"); }catch(e){ return {}; } }
+async function geocode(q){
+  const c = geoCache();
+  if(q in c) return c[q];
+  const wait = Math.max(0, lastGeo + 1100 - Date.now());
+  if(wait) await new Promise(r=>setTimeout(r, wait));
+  lastGeo = Date.now();
+  try{
+    const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q));
+    const j = await r.json();
+    const v = j[0] ? [+j[0].lat, +j[0].lon] : null;
+    c[q]=v; localStorage.setItem("rh_geo", JSON.stringify(c));
+    return v;
+  }catch(e){ return null; }
+}
+function vMapa(){
+  const cargosEx = [...new Set(DB.funcionarios.map(f=>f.cargo).filter(Boolean))].sort();
+  return `
+  <div class="h1">Mapa da equipe</div>
+  <div class="sub" id="mapstatus">Onde os funcionários moram e onde estão os projetos</div>
+  <div class="chips">${["Ativo","Todos","Candidato","Demitido","Pediu Demissão"].map(c=>`<button class="chip ${S.filtro===c?"on":""}" onclick="A.filtrar('${c}')">${c==="Todos"||c==="Pediu Demissão"?c:c+"s"}</button>`).join("")}</div>
+  <div class="selrow">
+    <select onchange="A.fCargo(this.value)"><option value="">Cargo: todos</option>${cargosEx.map(c=>`<option ${S.fCargo===c?"selected":""} value="${esc(c)}">${esc(c)}</option>`).join("")}</select>
+    <select onchange="A.fProj(this.value)"><option value="">Projeto: todos</option>${DB.projetos.map(p=>`<option ${S.fProj===p.id?"selected":""} value="${p.id}">${esc(p.icone||"")} ${esc(p.nome)}</option>`).join("")}</select>
+  </div>
+  <div class="card" style="padding:8px"><div id="map" style="height:62dvh;border-radius:12px;background:var(--gray-soft)"></div></div>
+  <div class="sub" style="margin-top:10px">🔵 funcionário (iniciais) · emoji = projeto (defina o local do projeto ao editá-lo). Endereços vêm do cadastro pessoal.</div>`;
+}
+async function initMapa(){
+  const el = document.getElementById("map");
+  if(!el) return;
+  try{ await ensureLeaflet(); }catch(e){ el.innerHTML = '<div class="empty">Não foi possível carregar o mapa (verifique a internet)</div>'; return; }
+  if(!document.body.contains(el)) return;
+  if(MAP){ try{ MAP.remove(); }catch(e){} MAP=null; }
+  MAP = L.map(el).setView([-14.2,-51.9], 4);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(MAP);
+  let list = DB.funcionarios.filter(f=> S.filtro==="Todos" || f.status===S.filtro);
+  if(S.fCargo) list = list.filter(f=>f.cargo===S.fCargo);
+  if(S.fProj) list = list.filter(f=>f.projetos.some(a=>a.projetoId===S.fProj && !a.fim));
+  const st = document.getElementById("mapstatus");
+  const pts = []; let sem = 0;
+  for(const p of DB.projetos.filter(p=>p.local)){
+    if(!document.body.contains(el)) return;
+    const g = await geocode(p.local); if(!g) continue;
+    L.marker(g,{icon:L.divIcon({className:"", html:`<div style="font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))">${p.icone||"📌"}</div>`, iconSize:[26,26], iconAnchor:[13,13]})}).addTo(MAP)
+      .bindPopup(`<b>${esc(p.icone||"")} ${esc(p.nome)}</b><br>${esc(getCli(p.clienteId)?.nome||"")}<br>${esc(p.local)}`);
+    pts.push(g);
+  }
+  for(const f of list){
+    if(!document.body.contains(el)) return;
+    const end = f.pessoal.endereco;
+    if(!end){ sem++; continue; }
+    if(st) st.textContent = "Localizando: "+f.nome+"…";
+    const g = await geocode(end);
+    if(!g){ sem++; continue; }
+    L.marker(g,{icon:L.divIcon({className:"", html:`<div style="width:34px;height:34px;border-radius:50%;background:#1d4ed8;color:#fff;display:grid;place-items:center;font-weight:700;font-size:.7rem;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)">${initials(f.nome)}</div>`, iconSize:[34,34], iconAnchor:[17,17]})}).addTo(MAP)
+      .bindPopup(`<b>${esc(f.nome)}</b><br>${esc(f.cargo||"")}<br>${esc(end)}<br><a href="#" onclick="A.abrirFicha('${f.id}');return false">Abrir ficha →</a>`);
+    pts.push(g);
+  }
+  if(st) st.textContent = pts.length ? `${pts.length} ponto(s) no mapa${sem?` · ${sem} funcionário(s) sem endereço localizável`:""}` : "Nenhum endereço localizável — preencha o campo Endereço no cadastro pessoal (ex.: cidade, UF)";
+  if(pts.length && document.body.contains(el)) MAP.fitBounds(pts, {padding:[40,40], maxZoom:11});
+}
+
+/* ---------------- empresas contratantes ---------------- */
+A.gerirEmpresas = ()=>{
+  const ov = document.createElement("div"); ov.className="overlay";
+  const lista = ()=> DB.empresas.map((e,i)=>`<div class="rowitem"><div class="inf"><b>${esc(e)}</b><span>${DB.funcionarios.filter(f=>f.empresa===e).length} funcionário(s)</span></div>
+    <button class="iconbtn" data-del="${i}">${ICONS.del}</button></div>`).join("") || `<div class="empty">Nenhuma empresa cadastrada</div>`;
+  ov.innerHTML = `<div class="modal"><h3>Empresas contratantes</h3>
+    <div id="emp_lista">${lista()}</div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <input id="emp_nova" placeholder="Nome da nova empresa…" style="flex:1;border:1.5px solid var(--line);border-radius:11px;padding:11px 12px;font-size:.95rem">
+      <button class="btn" data-add>${ICONS.plus} Adicionar</button></div>
+    <div class="acts"><button class="btn ghost" data-x>Fechar</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener("click", async e=>{
+    if(e.target===ov){ ov.remove(); return; }
+    const del = e.target.closest("[data-del]");
+    if(del){
+      const i = +del.getAttribute("data-del");
+      const emp = DB.empresas[i];
+      const n = DB.funcionarios.filter(f=>f.empresa===emp).length;
+      if(confirm(`Excluir "${emp}"?${n?` ${n} funcionário(s) continuarão com esse nome no cadastro.`:""}`)){
+        DB.empresas.splice(i,1);
+        if(await saveDB()){ ov.querySelector("#emp_lista").innerHTML = lista(); toast("✅ Excluída"); }
+      }
+    }
+  });
+  ov.querySelector("[data-x]").onclick = ()=>ov.remove();
+  ov.querySelector("[data-add]").onclick = async ()=>{
+    const v = ov.querySelector("#emp_nova").value.trim();
+    if(!v){ toast("Digite o nome da empresa"); return; }
+    if(DB.empresas.includes(v)){ toast("Essa empresa já existe"); return; }
+    DB.empresas.push(v); DB.empresas.sort();
+    if(await saveDB()){ ov.querySelector("#emp_lista").innerHTML = lista(); ov.querySelector("#emp_nova").value=""; toast("✅ Adicionada"); }
+  };
 };
 
 window.go = go; window.A = A;
