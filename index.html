@@ -265,7 +265,7 @@ const ICONS = {
 /* ---------------- configuração / autenticação ---------------- */
 const SCOPES = ["User.Read","Files.ReadWrite.All"];
 const DEFAULT_FOLDER = "(RECURSOS HUMANOS APP)";
-const APP_VER = "1.4";
+const APP_VER = "1.4.1";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -618,17 +618,6 @@ function vDash(){
       ${distrEmp.map(([c,n])=>`<div class="distrow"><span class="lb">${esc(c)}</span><div class="bar"><i style="width:${Math.round(n/mxE*100)}%;background:var(--ok)"></i></div><span class="vl">${n}</span></div>`).join("")||`<div class="empty">Sem dados</div>`}</div>
   </div>`;
 }
-A.aniverAgenda = fid=>{
-  const f=getF(fid); if(!f||!f.pessoal.nascimento){ toast("Sem data de nascimento cadastrada"); return; }
-  try{
-    const blob = new Blob([icsBirthday(f)], {type:"text/calendar;charset=utf-8"});
-    const url = URL.createObjectURL(blob);
-    const a=document.createElement("a"); a.href=url; a.download=`aniversario_${safeName(f.nome)}.ics`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 5000);
-    toast("📅 Evento gerado — abra o arquivo para adicionar à sua agenda");
-  }catch(e){ toast("❌ "+e.message); }
-};
 
 function vFunc(){
   const chips = ["Ativo","Todos","Candidato","Demitido","Pediu Demissão"];
@@ -967,6 +956,17 @@ A.recarregar = async ()=>{ busy(true); try{ thumbCache.clear(); urlCache.clear()
 A.copiarLink = async (l)=>{ try{ await navigator.clipboard.writeText(l); toast("✅ Link copiado! Abra no outro dispositivo."); }catch(e){ prompt("Copie o link:", l); } };
 A.abrirPasta = async ()=>{ busy(true); try{ const j = await gjson(iPath("")+"?$select=webUrl"); window.open(j.webUrl,"_blank"); }catch(e){ toast("❌ "+e.message); } busy(false); };
 A.tab = t=>{ S.tab=t; render(); };
+A.aniverAgenda = fid=>{
+  const f=getF(fid); if(!f||!f.pessoal.nascimento){ toast("Sem data de nascimento cadastrada"); return; }
+  try{
+    const blob = new Blob([icsBirthday(f)], {type:"text/calendar;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=`aniversario_${safeName(f.nome)}.ics`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    toast("📅 Evento gerado — abra o arquivo para adicionar à sua agenda");
+  }catch(e){ toast("❌ "+e.message); }
+};
 A.abrirFicha = (id, tab)=>{ S.fichaId=id; S.tab=tab||"pessoal"; S.view="ficha"; render(); window.scrollTo(0,0); };
 A.buscar = v=>{ S.busca=v; const l=document.activeElement; render(); const inp=document.querySelector(".search input"); if(inp){inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length);} };
 A.filtrar = c=>{ S.filtro=c; S.busca=""; render(); };
