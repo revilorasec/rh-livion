@@ -267,8 +267,9 @@ const ICONS = {
 };
 /* ---------------- configuração / autenticação ---------------- */
 const SCOPES = ["User.Read","Files.ReadWrite.All"];
+const LEGACY_FOLDER = "(RECURSOS HUMANOS APP)";
 const DEFAULT_FOLDER = "(RECURSOS HUMANOS APP)";
-const APP_VER = "1.7";
+const APP_VER = "1.8-ponte";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -282,6 +283,10 @@ function loadCfg(){
     return;
   }
   try{ cfg = JSON.parse(localStorage.getItem("rh_cfg")||"null"); }catch(e){ cfg = null; }
+  if(cfg && (!cfg.folder || cfg.folder===LEGACY_FOLDER)){
+    cfg.folder = DEFAULT_FOLDER;
+    localStorage.setItem("rh_cfg", JSON.stringify(cfg));
+  }
 }
 function gate(html){ const g=document.getElementById("gate"); g.classList.remove("hide"); g.innerHTML=html; document.getElementById("shell").classList.remove("on"); }
 function showSetup(err){
@@ -289,7 +294,7 @@ function showSetup(err){
     <p>Cole os dados do registro do aplicativo no Microsoft Entra (veja o Guia de Instalação).${err?`<br><b style="color:var(--bad)">${err}</b>`:""}</p>
     <div class="fld"><label>ID do aplicativo (cliente)</label><input id="s_cid" placeholder="ex.: 1b2c3d4e-…" value="${cfg?esc(cfg.cid):""}"></div>
     <div class="fld"><label>ID do diretório (locatário)</label><input id="s_tid" placeholder="ex.: 9f8e7d6c-…" value="${cfg?esc(cfg.tid):""}"></div>
-    <div class="fld"><label>Nome da pasta no OneDrive</label><input id="s_folder" value="${cfg?esc(cfg.folder):DEFAULT_FOLDER}"></div>
+    <div class="fld"><label>Caminho da pasta no OneDrive</label><input id="s_folder" value="${cfg?esc(cfg.folder):DEFAULT_FOLDER}"></div>
     <button class="btn" onclick="A.salvarSetup()">Salvar e entrar</button>
     <div class="tip">Esses dados ficam salvos apenas neste dispositivo.</div></div>`);
 }
@@ -343,10 +348,19 @@ function encPath(rel){ return rel.split("/").map(encodeURIComponent).join("/"); 
 function iPath(rel){ return `/drives/${FOLDER.driveId}/items/${FOLDER.id}` + (rel?`:/${encPath(rel)}:`:""); }
 
 async function resolveFolder(){
-  const j = await gjson(`/me/drive/root/children?$select=id,name,folder,remoteItem,parentReference&$top=999`);
-  const hit = (j.value||[]).find(x=>x.name===cfg.folder);
+  const folderPath = String(cfg.folder||DEFAULT_FOLDER).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"");
+  const parts = folderPath.split("/").filter(Boolean);
+  let hit = null;
+  if(parts.length>1){
+    try{ hit = await gjson(`/me/drive/root:/${encPath(folderPath)}?$select=id,name,folder,remoteItem,parentReference`); }
+    catch(e){ if(e.status!==404) throw e; }
+  }
   if(!hit){
-    throw new Error(`A pasta “${cfg.folder}” não foi encontrada no seu OneDrive. Se ela foi compartilhada com você, abra o OneDrive, clique com o botão direito na pasta compartilhada e escolha “Adicionar atalho a Meus arquivos”.`);
+    const j = await gjson(`/me/drive/root/children?$select=id,name,folder,remoteItem,parentReference&$top=999`);
+    hit = (j.value||[]).find(x=>x.name===(parts.at(-1)||folderPath));
+  }
+  if(!hit){
+    throw new Error(`A pasta “${folderPath}” não foi encontrada no seu OneDrive. Se ela foi compartilhada com você, adicione um atalho da pasta “${parts.at(-1)||folderPath}” a Meus arquivos.`);
   }
   FOLDER = hit.remoteItem
     ? { driveId: hit.remoteItem.parentReference.driveId, id: hit.remoteItem.id }
