@@ -337,7 +337,7 @@ async function boot(){
 }
 async function token(){
   try{ return (await msalApp.acquireTokenSilent({scopes:SCOPES, account})).accessToken; }
-  catch(e){ await msalApp.acquireTokenRedirect({scopes:SCOPES}); throw e; }
+  catch(e){ if(window.self!==window.top)return (await msalApp.acquireTokenPopup({scopes:SCOPES,account})).accessToken; await msalApp.acquireTokenRedirect({scopes:SCOPES}); throw e; }
 }
 async function gfetch(path, opts={}, retry=true){
   const t = await token();
@@ -989,7 +989,7 @@ A.salvarSetup = ()=>{
   localStorage.setItem("rh_cfg", JSON.stringify({cid,tid,folder}));
   location.reload();
 };
-A.entrar = ()=> msalApp.loginRedirect({scopes:SCOPES});
+A.entrar = async()=>{ if(window.self!==window.top){ const r=await msalApp.loginPopup({scopes:SCOPES}); if(r.account)msalApp.setActiveAccount(r.account); location.reload(); return; } await msalApp.loginRedirect({scopes:SCOPES}); };
 A.sair = ()=> confirmar("Deseja sair da conta Microsoft neste dispositivo?", ()=> msalApp.logoutRedirect());
 A.reconfig = ()=>{ cfg = JSON.parse(localStorage.getItem("rh_cfg")||"null"); showSetup(); };
 A.recarregar = async ()=>{ busy(true); try{ thumbCache.clear(); urlCache.clear(); await loadDB(); render(); toast("✅ Dados atualizados"); }catch(e){ toast("❌ "+e.message); } busy(false); };
