@@ -271,6 +271,8 @@ const ICONS = {
 const SCOPES = ["User.Read","Files.ReadWrite.All"];
 const LEGACY_FOLDER = "(RECURSOS HUMANOS APP)";
 const DEFAULT_FOLDER = "00-PORTAL LIVION/RECURSOS HUMANOS";
+const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
+const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const APP_VER = "1.8";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
@@ -285,6 +287,7 @@ function loadCfg(){
     return;
   }
   try{ cfg = JSON.parse(localStorage.getItem("rh_cfg")||"null"); }catch(e){ cfg = null; }
+  if(!cfg || !cfg.cid) cfg = {cid:DEFAULT_CLIENT_ID, tid:DEFAULT_TENANT_ID, folder:DEFAULT_FOLDER};
   if(cfg && (!cfg.folder || cfg.folder===LEGACY_FOLDER)){
     cfg.folder = DEFAULT_FOLDER;
     localStorage.setItem("rh_cfg", JSON.stringify(cfg));
@@ -304,12 +307,12 @@ function showLogin(){
   gate(`<div class="card"><div class="mark">RH</div><h1>Recursos Humanos</h1>
     <p>Livion Solutions · v${APP_VER}</p>
     <button class="btn" onclick="A.entrar()">Entrar com Microsoft</button>
-    <div class="tip"><a href="#" onclick="A.reconfig();return false">Alterar configuração</a></div></div>`);
+    </div>`);
 }
 function showFatal(msg, extra){
   gate(`<div class="card"><div class="mark">RH</div><h1>Ops…</h1><p>${msg}</p>${extra||""}
     <button class="btn ghost" style="margin-top:14px" onclick="location.reload()">Tentar novamente</button>
-    <div class="tip"><a href="#" onclick="A.reconfig();return false">Alterar configuração</a></div></div>`);
+    </div>`);
 }
 async function boot(){
   loadCfg();
@@ -331,7 +334,7 @@ async function boot(){
     startApp();
   }catch(e){
     console.error(e);
-    if(String(e).includes("AADSTS")||String(e.errorCode||"").includes("invalid_client")) showSetup("Verifique os IDs informados.");
+    if(String(e).includes("AADSTS")||String(e.errorCode||"").includes("invalid_client")) showFatal("A configuração corporativa do RH precisa ser revisada pelo administrador.");
     else showFatal("Não foi possível conectar: "+esc(e.message||String(e)));
   }
 }
