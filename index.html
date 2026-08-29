@@ -273,6 +273,7 @@ const LEGACY_FOLDER = "(RECURSOS HUMANOS APP)";
 const DEFAULT_FOLDER = "00-PORTAL LIVION/RECURSOS HUMANOS";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
+const AUTH_REDIRECT_URI = "https://revilorasec.github.io/fretes-livion/";
 const APP_VER = "1.8";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
@@ -320,7 +321,7 @@ async function boot(){
   try{
     if(typeof msal === "undefined") await LIB_MSAL;
     msalApp = new msal.PublicClientApplication({
-      auth:{ clientId:cfg.cid, authority:"https://login.microsoftonline.com/"+cfg.tid, redirectUri:location.origin+location.pathname },
+      auth:{ clientId:cfg.cid, authority:"https://login.microsoftonline.com/"+cfg.tid, redirectUri:AUTH_REDIRECT_URI },
       cache:{ cacheLocation:"localStorage" }
     });
     const resp = await msalApp.handleRedirectPromise();
@@ -992,7 +993,7 @@ A.salvarSetup = ()=>{
   localStorage.setItem("rh_cfg", JSON.stringify({cid,tid,folder}));
   location.reload();
 };
-A.entrar = async()=>{ if(window.self!==window.top){ const r=await msalApp.loginPopup({scopes:SCOPES}); if(r.account)msalApp.setActiveAccount(r.account); location.reload(); return; } await msalApp.loginRedirect({scopes:SCOPES}); };
+A.entrar = async()=>{ const r=await msalApp.loginPopup({scopes:SCOPES,redirectUri:AUTH_REDIRECT_URI}); if(r.account)msalApp.setActiveAccount(r.account); location.reload(); };
 A.sair = ()=> confirmar("Deseja sair da conta Microsoft neste dispositivo?", ()=> msalApp.logoutRedirect());
 A.reconfig = ()=>{ cfg = JSON.parse(localStorage.getItem("rh_cfg")||"null"); showSetup(); };
 A.recarregar = async ()=>{ busy(true); try{ thumbCache.clear(); urlCache.clear(); await loadDB(); render(); toast("✅ Dados atualizados"); }catch(e){ toast("❌ "+e.message); } busy(false); };
