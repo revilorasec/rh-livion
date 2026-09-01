@@ -273,7 +273,7 @@ const LEGACY_FOLDER = "(RECURSOS HUMANOS APP)";
 const DEFAULT_FOLDER = "00-PORTAL LIVION/RECURSOS HUMANOS";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
-const AUTH_REDIRECT_URI = "https://revilorasec.github.io/fretes-livion/";
+const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
 const APP_VER = "1.8";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
@@ -315,7 +315,37 @@ function showFatal(msg, extra){
     <button class="btn ghost" style="margin-top:14px" onclick="location.reload()">Tentar novamente</button>
     </div>`);
 }
+const RH_API="https://kvfjjtkwxxbvzlicwnrz.supabase.co/functions/v1/rh-api";
+let PORTAL_SESSION=null, PORTAL_BOOTSTRAP_PENDING=false, PORTAL_DATA_META=null;
+function rhApi(path,opt={}){
+  if(!PORTAL_SESSION?.token) throw new Error("Sessão do Portal indisponível");
+  return fetch(RH_API+path,{...opt,headers:{Authorization:"Bearer "+PORTAL_SESSION.token,"Content-Type":"application/json",...(opt.headers||{})},cache:"no-store"}).then(async r=>{const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b.error||("HTTP "+r.status));return b;});
+}
+function waitPortalSession(ms=7000){
+  if(PORTAL_SESSION) return Promise.resolve(PORTAL_SESSION);
+  return new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error("Sessão do Portal não recebida")),ms);const h=e=>{if(e.origin!=="https://portal.livionsolutions.com.br"&&e.origin!=="https://revilorasec.github.io")return;if(e.data?.type!=="PORTAL_SESSION"||!e.data?.token)return;clearTimeout(t);window.removeEventListener("message",h);PORTAL_SESSION=e.data;resolve(PORTAL_SESSION)};window.addEventListener("message",h);});
+}
+async function bootFromPortal(){
+  gate(`<div class="card"><div class="mark">RH</div><h1>Recursos Humanos</h1><p>Validando sua permissão no Portal Livion…</p><div class="spin" style="margin:0 auto"></div></div>`);
+  try{
+    const ps=await waitPortalSession();
+    account={name:ps.context?.user?.name||ps.context?.user?.email||"Usuário",username:ps.context?.user?.email||""};
+    const j=await rhApi("/data"); PORTAL_DATA_META=j;
+    if(!j.empty){ DB=j.data; rawSnapshot=JSON.stringify(DB); normalizeDB(); startApp(); return; }
+    if(ps.context?.administrator || ps.context?.userType==="INTERNO"){
+      PORTAL_BOOTSTRAP_PENDING=true;
+      await legacyBoot();
+      return;
+    }
+    showFatal("A base do RH ainda não foi inicializada pelo administrador.");
+  }catch(e){ console.error(e); showFatal("Não foi possível validar o acesso pelo Portal: "+esc(e.message||String(e))); }
+}
 async function boot(){
+  if(window.self!==window.top) return bootFromPortal();
+  return legacyBoot();
+}
+
+async function legacyBoot(){
   loadCfg();
   if(!cfg || !cfg.cid){ showSetup(); return; }
   try{
@@ -381,8 +411,18 @@ async function loadDB(){
   try{ DB = JSON.parse(rawSnapshot); }
   catch(e){ throw new Error("O arquivo dados.json existe mas não é um JSON válido. Restaure o backup da pasta Backup."); }
   normalizeDB();
+  if(PORTAL_BOOTSTRAP_PENDING && PORTAL_SESSION?.token){
+    try{ await rhApi("/bootstrap",{method:"POST",body:JSON.stringify({data:DB})}); PORTAL_BOOTSTRAP_PENDING=false; }
+    catch(e){ if(!String(e.message||e).includes("já inicializada")) console.warn("Bootstrap RH no Portal falhou",e); }
+  }
 }
 async function saveDB(){
+  if(PORTAL_SESSION?.token && PORTAL_SESSION?.context?.userType!=="INTERNO"){
+    const pm=PORTAL_DATA_META?.permissions||{};
+    if(!(pm.edit&&pm.salary&&pm.bank&&pm.sensitive&&pm.documents)){ toast("🔒 Seu perfil não possui permissão para alterar a base completa do RH."); return false; }
+    busy(true);
+    try{const body=JSON.stringify(DB,null,2);const j=await rhApi("/data",{method:"PUT",body:JSON.stringify({data:DB})});rawSnapshot=body;PORTAL_DATA_META={...(PORTAL_DATA_META||{}),revision:j.revision};return true;}catch(e){toast("❌ "+(e.message||"Erro ao salvar"));return false;}finally{busy(false);}
+  }
   busy(true);
   try{
     // backup diário (guarda o estado ANTES da primeira alteração do dia)
@@ -406,6 +446,7 @@ async function saveDB(){
   finally{ busy(false); }
 }
 async function uploadFile(rel, blob, mime){
+  if(PORTAL_SESSION?.token && PORTAL_SESSION?.context?.userType!=="INTERNO") throw new Error("Arquivos do RH não estão liberados para este perfil externo.");
   if(blob.size < 3800000){
     const r = await gfetch(iPath(rel)+"/content", {method:"PUT", headers:{"Content-Type":mime||"application/octet-stream"}, body:blob});
     if(!r.ok) throw new Error("Upload falhou ("+r.status+")");
@@ -422,11 +463,13 @@ async function uploadFile(rel, blob, mime){
   return last.json();
 }
 async function fileUrl(rel){
+  if(PORTAL_SESSION?.token && PORTAL_SESSION?.context?.userType!=="INTERNO") return null;
   if(urlCache.has(rel)) return urlCache.get(rel);
   const j = await gjson(iPath(rel)+"?$select=webUrl");
   urlCache.set(rel, j.webUrl); return j.webUrl;
 }
 async function thumbUrl(rel){
+  if(PORTAL_SESSION?.token && PORTAL_SESSION?.context?.userType!=="INTERNO") return null;
   if(thumbCache.has(rel)) return thumbCache.get(rel);
   const p = (async()=>{
     try{ const j = await gjson(iPath(rel)+"/thumbnails?$select=medium"); return j.value?.[0]?.medium?.url||null; }
