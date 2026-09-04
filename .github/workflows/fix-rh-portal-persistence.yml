@@ -1,0 +1,36 @@
+name: Fix RH Portal persistence
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-rh-portal-persistence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch RH persistence
+        run: python3 tools/fix_portal_data_persistence.py
+      - name: Verify patch markers
+        run: |
+          grep -F 'if(PORTAL_SESSION?.token){' index.html
+          grep -F 'const APP_VER = "1.8.3";' index.html
+          grep -F 'const j=await rhApi("/data")' index.html
+      - name: Commit corrected RH
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "fix: persist RH edits through Portal API"
+            git push
+          fi
