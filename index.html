@@ -274,7 +274,7 @@ const DEFAULT_FOLDER = "00-PORTAL LIVION/RECURSOS HUMANOS";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
-const APP_VER = "1.8";
+const APP_VER = "1.8.3";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -417,7 +417,9 @@ async function loadDB(){
   }
 }
 async function saveDB(){
-  if(PORTAL_SESSION?.token && PORTAL_SESSION?.context?.userType!=="INTERNO"){
+  // Dentro do Portal, todos os usuarios autorizados persistem pela API central do RH.
+  // O OneDrive fica restrito ao modo legado, quando o app e aberto fora do Portal.
+  if(PORTAL_SESSION?.token){
     const pm=PORTAL_DATA_META?.permissions||{};
     if(!(pm.edit&&pm.salary&&pm.bank&&pm.sensitive&&pm.documents)){ toast("🔒 Seu perfil não possui permissão para alterar a base completa do RH."); return false; }
     busy(true);
@@ -1039,7 +1041,7 @@ A.salvarSetup = ()=>{
 A.entrar = async()=>{ const r=await msalApp.loginPopup({scopes:SCOPES,redirectUri:AUTH_REDIRECT_URI}); if(r.account)msalApp.setActiveAccount(r.account); location.reload(); };
 A.sair = ()=> confirmar("Deseja sair da conta Microsoft neste dispositivo?", ()=> msalApp.logoutRedirect());
 A.reconfig = ()=>{ cfg = JSON.parse(localStorage.getItem("rh_cfg")||"null"); showSetup(); };
-A.recarregar = async ()=>{ busy(true); try{ thumbCache.clear(); urlCache.clear(); await loadDB(); render(); toast("✅ Dados atualizados"); }catch(e){ toast("❌ "+e.message); } busy(false); };
+A.recarregar = async ()=>{ busy(true); try{ thumbCache.clear(); urlCache.clear(); if(PORTAL_SESSION?.token){ const j=await rhApi("/data"); PORTAL_DATA_META=j; if(j.empty) throw new Error("Base RH vazia"); DB=j.data; rawSnapshot=JSON.stringify(DB); normalizeDB(); } else { await loadDB(); } render(); toast("✅ Dados atualizados"); }catch(e){ toast("❌ "+e.message); } busy(false); };
 A.copiarLink = async (l)=>{ try{ await navigator.clipboard.writeText(l); toast("✅ Link copiado! Abra no outro dispositivo."); }catch(e){ prompt("Copie o link:", l); } };
 A.abrirPasta = async ()=>{ busy(true); try{ const j = await gjson(iPath("")+"?$select=webUrl"); window.open(j.webUrl,"_blank"); }catch(e){ toast("❌ "+e.message); } busy(false); };
 A.tab = t=>{ S.tab=t; render(); };
