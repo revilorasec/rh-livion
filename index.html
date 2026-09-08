@@ -271,6 +271,9 @@ const ICONS = {
 const SCOPES = ["User.Read","Files.ReadWrite.All"];
 const LEGACY_FOLDER = "(RECURSOS HUMANOS APP)";
 const DEFAULT_FOLDER = "00-PORTAL LIVION/RECURSOS HUMANOS";
+const RH_DATA_PATH = "Dados/dados.json";
+const RH_LEGACY_DATA_PATH = "dados.json";
+const RH_BACKUP_FOLDER = "Backups";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
@@ -382,6 +385,19 @@ async function gfetch(path, opts={}, retry=true){
 async function gjson(path, opts){ const r = await gfetch(path, opts); if(!r.ok){ const b=await r.text(); const err=new Error("Graph "+r.status+": "+b.slice(0,200)); err.status=r.status; throw err; } return r.status===204?null:r.json(); }
 function encPath(rel){ return rel.split("/").map(encodeURIComponent).join("/"); }
 function iPath(rel){ return `/drives/${FOLDER.driveId}/items/${FOLDER.id}` + (rel?`:/${encPath(rel)}:`:""); }
+async function ensureFolder(rel){
+  const parts=String(rel||"").replace(/\\/g,"/").split("/").filter(Boolean);
+  for(let i=0;i<parts.length;i++){
+    const current=parts.slice(0,i+1).join("/"), parent=parts.slice(0,i).join("/");
+    try{ await gjson(iPath(current)+"?$select=id,folder"); }
+    catch(e){
+      if(e.status!==404) throw e;
+      const endpoint=(parent?iPath(parent):iPath())+"/children";
+      const r=await gfetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:parts[i],folder:{},"@microsoft.graph.conflictBehavior":"fail"})});
+      if(!r.ok && r.status!==409) throw new Error("Não foi possível criar a pasta "+current+" no OneDrive ("+r.status+").");
+    }
+  }
+}
 
 async function resolveFolder(){
   const folderPath = String(cfg.folder||DEFAULT_FOLDER).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"");
@@ -403,13 +419,26 @@ async function resolveFolder(){
     : { driveId: hit.parentReference.driveId, id: hit.id };
 }
 async function loadDB(){
-  const meta = await gjson(iPath("dados.json")+"?$select=eTag,id");
-  dbEtag = meta.eTag;
-  const r = await gfetch(iPath("dados.json")+"/content");
-  if(!r.ok) throw new Error("Não foi possível ler o dados.json na pasta do OneDrive ("+r.status+").");
-  rawSnapshot = await r.text();
-  try{ DB = JSON.parse(rawSnapshot); }
-  catch(e){ throw new Error("O arquivo dados.json existe mas não é um JSON válido. Restaure o backup da pasta Backup."); }
+  let dataPath=RH_DATA_PATH, meta;
+  try{ meta=await gjson(iPath(dataPath)+"?$select=eTag,id"); }
+  catch(e){
+    if(e.status!==404) throw e;
+    dataPath=RH_LEGACY_DATA_PATH;
+    meta=await gjson(iPath(dataPath)+"?$select=eTag,id");
+  }
+  let r=await gfetch(iPath(dataPath)+"/content");
+  if(!r.ok) throw new Error("Não foi possível ler "+dataPath+" no OneDrive ("+r.status+").");
+  rawSnapshot=await r.text();
+  try{ DB=JSON.parse(rawSnapshot); }
+  catch(e){ throw new Error("O arquivo de dados do RH não é um JSON válido. Restaure um arquivo da pasta Backups."); }
+  if(dataPath===RH_LEGACY_DATA_PATH){
+    await ensureFolder("Dados");
+    const migrated=await gfetch(iPath(RH_DATA_PATH)+"/content",{method:"PUT",headers:{"Content-Type":"application/json","If-None-Match":"*"},body:rawSnapshot});
+    if(!migrated.ok && migrated.status!==409 && migrated.status!==412) throw new Error("Não foi possível organizar a base do RH em Dados/dados.json ("+migrated.status+").");
+    meta=await gjson(iPath(RH_DATA_PATH)+"?$select=eTag,id");
+    dataPath=RH_DATA_PATH;
+  }
+  dbEtag=meta.eTag;
   normalizeDB();
   if(PORTAL_BOOTSTRAP_PENDING && PORTAL_SESSION?.token){
     try{ await rhApi("/bootstrap",{method:"POST",body:JSON.stringify({data:DB})}); PORTAL_BOOTSTRAP_PENDING=false; }
@@ -430,12 +459,13 @@ async function saveDB(){
     // backup diário (guarda o estado ANTES da primeira alteração do dia)
     const today = new Date().toISOString().slice(0,10);
     if(localStorage.getItem("rh_lastbk")!==today && rawSnapshot){
-      try{ await gfetch(iPath(`Backup/dados_${today}.json`)+"/content", {method:"PUT", headers:{"Content-Type":"application/json"}, body:rawSnapshot}); localStorage.setItem("rh_lastbk",today); }catch(e){ console.warn("backup falhou",e); }
+      try{ await ensureFolder(RH_BACKUP_FOLDER); await gfetch(iPath(`${RH_BACKUP_FOLDER}/dados_${today}.json`)+"/content", {method:"PUT", headers:{"Content-Type":"application/json"}, body:rawSnapshot}); localStorage.setItem("rh_lastbk",today); }catch(e){ console.warn("backup falhou",e); }
     }
     DB.meta.atualizadoEm = new Date().toISOString();
     DB.meta.atualizadoPor = account?.name || account?.username || "";
     const body = JSON.stringify(DB, null, 2);
-    const r = await gfetch(iPath("dados.json")+"/content", {method:"PUT", headers:{"Content-Type":"application/json","If-Match":dbEtag}, body});
+    await ensureFolder("Dados");
+    const r = await gfetch(iPath(RH_DATA_PATH)+"/content", {method:"PUT", headers:{"Content-Type":"application/json","If-Match":dbEtag}, body});
     if(r.status===412){
       toast("⚠️ Outra pessoa salvou alterações. Recarregando…");
       await loadDB(); render();
