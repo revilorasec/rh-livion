@@ -367,7 +367,7 @@ async function legacyBoot(){
     else showFatal("Não foi possível conectar: "+esc(e.message||String(e)));
   }
 }
-let graphReady=null;
+let graphReady=null, filesState="idle";
 function canReadFiles(){return PORTAL_DATA_META?.userType==='INTERNO' && PORTAL_DATA_META?.permissions?.documents===true;}
 function canWriteFiles(){const p=PORTAL_DATA_META?.permissions||{};return canReadFiles()&&p.edit&&p.salary&&p.bank&&p.sensitive;}
 async function initFileAuth(){
@@ -380,13 +380,25 @@ async function initFileAuth(){
 }
 function fileAccount(){return msalApp?.getAllAccounts().find(a=>a.localAccountId===PORTAL_DATA_META?.user?.id);}
 async function connectFiles(){
+  filesState="connecting"; render();
   try{
     await initFileAuth();
     const result=await msalApp.acquireTokenPopup({scopes:SCOPES,account:fileAccount(),loginHint:PORTAL_DATA_META?.user?.email});
     if(result.account?.localAccountId!==PORTAL_DATA_META?.user?.id)throw new Error('Use a mesma conta corporativa do Portal.');
     msalApp.setActiveAccount(result.account);FOLDER=null;graphReady=null;
-    await ensureFiles();thumbCache.clear();urlCache.clear();render();toast('Arquivos conectados.');
-  }catch(e){toast(e.message||'Não foi possível conectar os arquivos.');}
+    await ensureFiles();filesState="ready";thumbCache.clear();urlCache.clear();render();toast('Arquivos conectados.');
+  }catch(e){filesState="needs-consent";render();toast(e.message||'Não foi possível conectar os arquivos.');}
+}
+async function autoConnectFiles(){
+  if(!canReadFiles()||filesState==='ready'||filesState==='connecting')return;
+  filesState="connecting"; render();
+  try{
+    await initFileAuth();
+    const a=fileAccount();
+    if(!a){filesState="needs-consent";render();return;}
+    msalApp.setActiveAccount(a);
+    await ensureFiles();filesState="ready";thumbCache.clear();urlCache.clear();render();
+  }catch(e){filesState="needs-consent";render();}
 }
 async function ensureFiles(){
   if(!canReadFiles())throw new Error('Seu perfil não tem acesso aos arquivos do RH.');
@@ -397,9 +409,9 @@ async function ensureFiles(){
 async function token(){
   if(PORTAL_SESSION){
     await initFileAuth();const a=fileAccount();
-    if(!a)throw new Error('Clique em Conectar arquivos para acessar o OneDrive.');
+    if(!a)throw new Error('Autorize o acesso aos arquivos do RH.');
     try{return (await msalApp.acquireTokenSilent({scopes:SCOPES,account:a})).accessToken;}
-    catch{throw new Error('Clique em Conectar arquivos para renovar o acesso ao OneDrive.');}
+    catch{throw new Error('Autorize novamente o acesso aos arquivos do RH.');}
   }
   try{ return (await msalApp.acquireTokenSilent({scopes:SCOPES, account})).accessToken; }
   catch(e){ if(window.self!==window.top)return (await msalApp.acquireTokenPopup({scopes:SCOPES,account})).accessToken; await msalApp.acquireTokenRedirect({scopes:SCOPES}); throw e; }
@@ -620,6 +632,7 @@ function startApp(){
   document.getElementById("uav").textContent = initials(account.name || account.username);
   thumbUrl("logo.png").then(u=>{ if(u){ LOGO_URL=u; paintLogo(); } }).catch(()=>{});
   render();
+  void autoConnectFiles();
 }
 function go(v){ S.view=v; if(v!=="ficha") S.fichaId=null; render(); window.scrollTo(0,0); }
 function render(){
@@ -637,7 +650,8 @@ function render(){
   else if(S.view==="mapa") html = vMapa();
   else if(S.view==="cargos") html = vCargos();
   else if(S.view==="mais") html = vMais();
-  M.innerHTML = top + (canReadFiles()?`<div style="padding:12px 20px"><button class="btn sec sm" onclick="connectFiles()">Conectar arquivos</button></div>`:"") + html;
+  const fileAction = canReadFiles() && filesState!=="ready" ? `<div style="padding:12px 20px"><button class="btn sec sm" onclick="connectFiles()">${filesState==="connecting"?"Conectando arquivos…":"Autorizar arquivos"}</button></div>` : "";
+  M.innerHTML = top + fileAction + html;
   hydrateAvatars();
   paintLogo();
   if(S.view==="mapa") initMapa();

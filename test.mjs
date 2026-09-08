@@ -119,6 +119,12 @@ test('abertura direta mostra Portal e não inicia base legada',async()=>{
   vm.runInContext(html.slice(html.indexOf('async function boot(){'),html.indexOf('async function legacyBoot(){')),c);
   await vm.runInContext('boot()',c);assert.match(shown,/Abrir Portal Livion/);
 });
+test('conexão de arquivos é automática e o botão só aparece como fallback',()=>{
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
+  assert.match(html,/void autoConnectFiles\(\)/);
+  assert.match(html,/filesState!=="ready"/);
+  assert.match(html,/Autorizar arquivos/);
+});
 
 // Executa as funções reais do HTML contra o handler real, com banco/Graph simulados.
 function screen(api) {
