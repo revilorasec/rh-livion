@@ -248,6 +248,7 @@ const ICONS = {
   home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
   team:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5"/><circle cx="17.5" cy="9.5" r="2.5"/><path d="M16 15.2c2.6.3 4.6 1.8 5.5 4.8"/></svg>',
   proj:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  calendar:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>',
   cash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></svg>',
   more:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg>',
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
@@ -277,7 +278,7 @@ const RH_BACKUP_FOLDER = "Backups";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
-const APP_VER = "1.9.0";
+const APP_VER = "1.10.0";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -622,6 +623,7 @@ const NAV = [
   {v:"tabela",l:"Tabela",       ic:"table"},
   {v:"mapa",  l:"Mapa",         ic:"pin"},
   {v:"proj",  l:"Projetos",     ic:"proj"},
+  {v:"ferias",l:"Férias",       ic:"calendar"},
   {v:"cargos",l:"Cargos",       ic:"cash"},
   {v:"mais",  l:"Mais",         ic:"more"},
 ];
@@ -646,6 +648,7 @@ function render(){
   else if(S.view==="func") html = vFunc();
   else if(S.view==="ficha") html = vFicha();
   else if(S.view==="proj") html = vProj();
+  else if(S.view==="ferias") html = vFerias();
   else if(S.view==="tabela") html = vTabela();
   else if(S.view==="mapa") html = vMapa();
   else if(S.view==="cargos") html = vCargos();
@@ -852,6 +855,29 @@ function vTabela(){
     <table class="tbl" style="user-select:text"><thead><tr>${cols.map(c=>`<th>${c.l}</th>`).join("")}<th></th></tr></thead>
     <tbody>${list.map(f=>`<tr>${cols.map(c=>`<td>${colVal(f,c.k)}</td>`).join("")}<td><button class="iconbtn" title="Abrir ficha" onclick="A.abrirFicha('${f.id}')">${ICONS.open}</button></td></tr>`).join("") || `<tr><td colspan="${cols.length+1}" class="empty">Ninguém neste filtro</td></tr>`}</tbody></table>
   </div>`;
+}
+
+const FERIAS_STATUS = ["Planejada","Solicitada","Aprovada","Em férias","Concluída","Cancelada"];
+const FERIAS_STATUS_CLR = {"Planejada":"b-info","Solicitada":"b-warn","Aprovada":"b-ok","Em férias":"b-ok","Concluída":"b-gray","Cancelada":"b-bad"};
+function feriasDias(r){
+  if(r?.dias) return Number(r.dias)||0;
+  if(!r?.inicio||!r?.fim) return 0;
+  const a=new Date(r.inicio+"T12:00"), b=new Date(r.fim+"T12:00");
+  return Number.isNaN(a.getTime())||Number.isNaN(b.getTime())||b<a?0:Math.floor((b-a)/86400000)+1;
+}
+function feriasNome(r){ return getF(r.funcionarioId)?.nome||"Funcionário removido"; }
+function vFerias(){
+  const rows=[...(DB.ferias||[])].sort((a,b)=>String(a.inicio||"9999").localeCompare(String(b.inicio||"9999")));
+  const hoje=new Date().toISOString().slice(0,10);
+  const proximas=rows.filter(r=>r.status!=="Cancelada"&&r.inicio>=hoje).length;
+  const emCurso=rows.filter(r=>r.status!=="Cancelada"&&r.inicio<=hoje&&r.fim>=hoje).length;
+  const diasPlanejados=rows.filter(r=>r.status!=="Cancelada").reduce((s,r)=>s+feriasDias(r),0);
+  return `<div class="h1">Férias</div>
+  <div class="sub">Planeje períodos, acompanhe aprovações e mantenha o histórico de férias em um só lugar.</div>
+  <div class="stats"><div class="stat"><div class="n">${proximas}</div><div class="l">Próximos períodos</div></div><div class="stat accent"><div class="n">${emCurso}</div><div class="l">Em férias hoje</div></div><div class="stat"><div class="n">${diasPlanejados}</div><div class="l">Dias registrados</div></div></div>
+  <div class="secttl"><h3>Programação de férias</h3><button class="btn" onclick="A.editFerias(-1)">${ICONS.plus} Nova férias</button></div>
+  <div class="card" style="margin-bottom:14px"><div class="sub">Período aquisitivo, concessivo, datas efetivas, abono, 13º, aviso e pagamento.</div></div>
+  <div class="grid">${rows.map(r=>{const d=feriasDias(r), f=getF(r.funcionarioId);return `<div class="card"><div class="secttl"><div style="display:flex;align-items:center;gap:10px;min-width:0">${f?avatarHtml(f,"sm"):""}<div class="inf"><b>${esc(feriasNome(r))}</b><span>${fmtDate(r.inicio)} a ${fmtDate(r.fim)} · ${d} dia${d===1?"":"s"}</span></div></div><span class="badge ${FERIAS_STATUS_CLR[r.status]||"b-gray"}">${esc(r.status||"Planejada")}</span></div><div class="meta-grid"><div><small>Aquisitivo</small><b>${fmtDate(r.aquisitivoInicio)} a ${fmtDate(r.aquisitivoFim)}</b></div><div><small>Concessivo</small><b>${fmtDate(r.concessivoInicio)} a ${fmtDate(r.concessivoFim)}</b></div><div><small>Abono</small><b>${r.abonoDias||0} dia(s)</b></div><div><small>13º antecipado</small><b>${r.adiantamento13?"Sim":"Não"}</b></div></div>${r.observacoes?`<div class="sub" style="margin-top:10px">${esc(r.observacoes)}</div>`:""}<div class="acts" style="margin-top:12px"><button class="btn ghost sm" onclick="A.editFerias('${esc(r.id)}')">${ICONS.edit} Editar</button><button class="btn ghost sm" onclick="A.delFerias('${esc(r.id)}')">${ICONS.del} Excluir</button></div></div>`;}).join("")||`<div class="empty card">Nenhum período cadastrado. Clique em “Nova férias” para começar.</div>`}</div>`;
 }
 
 function vFicha(){
@@ -1148,6 +1174,35 @@ A.delProj = id=>{ const p=getProj(id); confirmar(`Excluir o projeto “${p.nome}
 A.delCli = id=>{ const c=getCli(id); const n=DB.projetos.filter(p=>projClientes(p).some(x=>x.id===id)).length; confirmar(`Excluir o cliente “${c.nome}”?${n?` ${n} projeto(s) ficarão sem esse cliente.`:""}`, async ()=>{ DB.clientes = DB.clientes.filter(x=>x.id!==id); DB.projetos.forEach(p=>{ if(Array.isArray(p.clientes)) p.clientes=p.clientes.filter(x=>x!==id); if(p.clienteId===id) p.clienteId=(p.clientes&&p.clientes[0])||null; }); if(await saveDB()) toast("✅ Excluído"); }); };
 A.delCargo = i=> confirmar(`Excluir o nível ${DB.cargos[i]?.nivel||""} de ${DB.cargos[i]?.cargo||"cargo"}?`, async ()=>{ DB.cargos.splice(i,1); if(await saveDB()) toast("✅ Excluído"); });
 A.delRegra = i=> confirmar("Excluir esta regra de referência?", async ()=>{ DB.regrasSalario.splice(i,1); if(await saveDB()) toast("✅ Excluído"); });
+A.delFerias = id=> confirmar("Excluir este período de férias?", async ()=>{ DB.ferias=DB.ferias.filter(r=>r.id!==id); if(await saveDB()) toast("✅ Período excluído"); });
+A.editFerias = id=>{
+  const r=id!==-1?(DB.ferias||[]).find(x=>x.id===id):null;
+  const opts=DB.funcionarios.filter(f=>f.status!=="Demitido"&&f.status!=="Não Contratado").sort((a,b)=>a.nome.localeCompare(b.nome)).map(f=>[f.id,f.nome]);
+  openForm(r?"Editar férias":"Cadastrar férias",[
+    {k:"funcionarioId",label:"Funcionário",type:"select",opts,req:1,full:1},
+    {k:"aquisitivoInicio",label:"Período aquisitivo — início",type:"date"},
+    {k:"aquisitivoFim",label:"Período aquisitivo — fim",type:"date"},
+    {k:"concessivoInicio",label:"Período concessivo — início",type:"date"},
+    {k:"concessivoFim",label:"Período concessivo — fim",type:"date"},
+    {k:"inicio",label:"Férias — início",type:"date",req:1},
+    {k:"fim",label:"Férias — fim",type:"date",req:1},
+    {k:"dias",label:"Dias de férias",type:"number",req:1,ph:"Calculado pelas datas; ajuste se houver divisão"},
+    {k:"abonoDias",label:"Abono pecuniário (dias)",type:"number",ph:"Ex.: 10"},
+    {k:"adiantamento13",label:"Adiantamento do 13º",type:"select",opts:[["","Não informado"],["true","Sim"],["false","Não"]]},
+    {k:"status",label:"Status",type:"select",opts:FERIAS_STATUS.map(x=>[x,x])},
+    {k:"avisoEm",label:"Aviso comunicado em",type:"date"},
+    {k:"pagamentoEm",label:"Pagamento previsto/realizado em",type:"date"},
+    {k:"observacoes",label:"Observações",type:"textarea"},
+  ],r||{status:"Planejada",adiantamento13:"",abonoDias:0},async v=>{
+    const a=new Date((v.inicio||"")+"T12:00"),b=new Date((v.fim||"")+"T12:00");
+    if(!v.inicio||!v.fim||Number.isNaN(a.getTime())||Number.isNaN(b.getTime())||b<a){toast("Informe um intervalo de férias válido");return false;}
+    v.dias=Math.floor((b-a)/86400000)+1;
+    v.abonoDias=v.abonoDias?Number(v.abonoDias):0;
+    v.adiantamento13=v.adiantamento13==="true";
+    if(r)Object.assign(r,v);else DB.ferias.push({id:uid(),criadoEm:new Date().toISOString(),...v});
+    if(await saveDB())toast("✅ Férias salvas");
+  });
+};
 A.mudarLogo = ()=>{
   const inp = document.getElementById("fileGen");
   inp.accept = "image/*"; inp.value = "";
@@ -1560,6 +1615,7 @@ A.exportar = async ()=>{
     add("Clientes", DB.clientes.map(c=>({Nome:c.nome, "Empresa contratada":c.empresaContratada, CNPJ:c.cnpj, UF:c.uf, Cidade:c.cidade, Contato:c.contato, Telefone:c.telefone, Email:c.email})));
     add("Projetos", DB.projetos.map(p=>({Projeto:p.nome, Clientes:projClientesNome(p), Status:p.status, Locais:(p.locais||[]).join(" | "), "Início":p.inicio, "Término":p.fim, "Descrição":p.descricao})));
     add("Alocações", DB.funcionarios.flatMap(f=>f.projetos.map(a=>({Funcionario:f.nome, Projeto:getProj(a.projetoId)?.nome, "Função":a.funcao||a.cargo, "Início":a.inicio, "Saída":a.fim}))));
+    add("Férias", (DB.ferias||[]).map(r=>({Funcionario:feriasNome(r), Status:r.status, "Aquisitivo início":r.aquisitivoInicio, "Aquisitivo fim":r.aquisitivoFim, "Concessivo início":r.concessivoInicio, "Concessivo fim":r.concessivoFim, "Férias início":r.inicio, "Férias fim":r.fim, Dias:feriasDias(r), "Abono dias":r.abonoDias, "13º antecipado":r.adiantamento13?"Sim":"Não", "Aviso em":r.avisoEm, "Pagamento em":r.pagamentoEm, Observações:r.observacoes})));
     add("Cargos", DB.cargos.map(c=>({Cargo:c.cargo, "Nível":c.nivel, "Salário":c.salario, "% Aumento":c.aumento, "Carga horária":c.cargaHoraria, Obs:c.observacao})));
     XLSX.writeFile(wb, `RH Livion ${new Date().toISOString().slice(0,10)}.xlsx`);
     toast("✅ Planilha gerada");
@@ -1569,6 +1625,14 @@ A.exportar = async ()=>{
 /* ---------------- normalização de dados (migra estruturas antigas) ---------------- */
 function normalizeDB(){
   if(!Array.isArray(DB.empresas)) DB.empresas = [...new Set(DB.funcionarios.map(f=>f.empresa).filter(Boolean))].sort();
+  if(!Array.isArray(DB.ferias)) DB.ferias = [];
+  DB.ferias.forEach(r=>{
+    if(!r.id) r.id=uid();
+    if(!r.status) r.status="Planejada";
+    if(r.abonoDias===undefined) r.abonoDias=0;
+    if(r.adiantamento13===undefined) r.adiantamento13=false;
+    if(!r.dias) r.dias=feriasDias(r);
+  });
   DB.funcionarios.forEach(f=>{
     const p = f.pessoal || (f.pessoal = {});
     if(!Array.isArray(p.dependentes)){

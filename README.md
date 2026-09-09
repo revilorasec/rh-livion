@@ -1,6 +1,8 @@
-# RH Livion 1.9.0
+# RH Livion 1.10.0
 
 Cadastros operacionais no Supabase (rh-api / portal_rh_data); anexos no OneDrive via Microsoft Graph. Abrir pelo Portal Livion: https://portal.livionsolutions.com.br/.
+
+A área **Férias** centraliza funcionário, período aquisitivo, período concessivo, datas de início e fim, dias calculados, abono pecuniário, adiantamento do 13º, status, aviso, pagamento e observações. Os registros ficam em `DB.ferias` e também entram na exportação Excel.
 
 ## Operação
 
@@ -14,7 +16,7 @@ Cadastros operacionais no Supabase (rh-api / portal_rh_data); anexos no OneDrive
 
 Frontend: index.html. Backend: supabase/functions/rh-api/index.ts. Testes: `node --disable-warning=ExperimentalWarning --test test.mjs` (Node 24).
 
-27 testes sintéticos aprovados. Atualização condicional validada também em tabela temporária PostgreSQL com rollback, sem alterar os cadastros. Isso não equivale a um teste de escrita nos dados de produção.
+29 testes sintéticos aprovados. Atualização condicional validada também em tabela temporária PostgreSQL com rollback, sem alterar os cadastros. Isso não equivale a um teste de escrita nos dados de produção.
 
 Publicar HTML e backend juntos; preferir HTML primeiro (backend anterior aceita o campo revision adicional). Clientes antigos sem revision recebem 428 após atualização da API e precisam atualizar a página. verify_jwt=false é necessário para autenticação Microsoft própria já existente; a função valida identidade via Graph e acesso no cadastro do Portal.
 
