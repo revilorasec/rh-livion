@@ -1299,7 +1299,7 @@ A.novoFunc = ()=> openForm("Novo funcionário", fDados({}), {status:"Ativo"}, as
   DB.funcionarios.sort((a,b)=>a.nome.localeCompare(b.nome));
   if(await saveDB()){ toast("✅ "+v.nome+" cadastrado"); A.abrirFicha(id); }
 });
-A.editDados = id=>{ const f=getF(id); openForm("Editar dados", fDados(f), f, async v=>{ Object.assign(f, v); if(await saveDB()) toast("✅ Salvo"); }); };
+A.editDados = id=>{ const f=getF(id); if(!f){toast("Funcionário não encontrado. Recarregue os dados.");return;} if(!f.pessoal)f.pessoal={};if(!Array.isArray(f.bancos))f.bancos=[];if(!Array.isArray(f.documentos))f.documentos=[];if(!Array.isArray(f.projetos))f.projetos=[]; openForm("Editar dados", fDados(f), f, async v=>{ Object.assign(f, v); if(await saveDB()) toast("✅ Salvo"); }); };
 A.editNotas = id=>{ const f=getF(id); openForm("Anotações e avaliação", [
     {k:"avaliacao", label:"Avaliação", type:"textarea"},
     {k:"obsAvaliacao", label:"Observação da avaliação", type:"textarea"},
