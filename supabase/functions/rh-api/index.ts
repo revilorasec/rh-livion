@@ -27,16 +27,24 @@ Deno.serve(async(req)=>{const origin=req.headers.get('origin');if(req.method==='
 if(path==='/data'&&req.method==='GET'&&ctx.userType!=='INTERNO'){const q=await db.from('portal_rh_data').select('payload,revision,updated_at,updated_by').eq('id',1).maybeSingle();if(q.error)throw q.error;const row=q.data||{payload:{},revision:0};const data=onlyEmployee(row.payload,ctx);return reply(origin,200,{ok:true,empty:false,revision:row.revision,updatedAt:row.updated_at,updatedBy:row.updated_by,data,userType:ctx.userType,user:ctx.me,employeeOnly:true,permissions:{salary:false,bank:false,sensitive:false,documents:false,edit:false}});}if(path==='/data'&&req.method==='GET'){if(!has(ctx.actions,'rh.visualizar_dados_basicos')&&!ctx.admin)throw new Error('FORBIDDEN');const q=await db.from('portal_rh_data').select('payload,revision,updated_at,updated_by').eq('id',1).maybeSingle();if(q.error)throw q.error;const row=q.data||{payload:{},revision:0,updated_at:null,updated_by:null};const empty=!row.payload||Object.keys(row.payload).length===0;return reply(origin,200,{ok:true,empty,revision:row.revision,updatedAt:row.updated_at,updatedBy:row.updated_by,data:empty?{}:sanitize(row.payload,ctx),userType:ctx.userType,user:ctx.me,permissions:{salary:has(ctx.actions,'rh.visualizar_salarios'),bank:has(ctx.actions,'rh.visualizar_dados_bancarios'),sensitive:has(ctx.actions,'rh.visualizar_dados_sensiveis'),documents:ctx.userType==='INTERNO'&&has(ctx.actions,'rh.visualizar_documentos'),edit:has(ctx.actions,'rh.editar_funcionarios')}});}
 
 if(path==='/data'&&req.method==='PUT'){
-  const required=['rh.editar_funcionarios','rh.visualizar_salarios','rh.visualizar_dados_bancarios','rh.visualizar_dados_sensiveis','rh.visualizar_documentos'];
+  const required=['rh.editar_funcionarios'];
   if(ctx.userType!=='INTERNO'||!required.every(key=>has(ctx.actions,key))) throw new Error('FORBIDDEN');
   const body=await req.json();
   if(!body?.data || typeof body.data!=='object' || Array.isArray(body.data)) return reply(origin,400,{error:'Dados inválidos'});
   if(!Number.isSafeInteger(body.revision) || body.revision<0) return reply(origin,428,{error:'Revisão obrigatória. Atualize o aplicativo e recarregue os dados.'});
+  const cur=await db.from('portal_rh_data').select('payload,revision').eq('id',1).maybeSingle();
+  if(cur.error) throw cur.error;
+  if(!cur.data || cur.data.revision!==body.revision) return reply(origin,409,{error:'A base foi alterada. Recarregue antes de salvar.'});
+  const incoming=structuredClone(body.data), current=cur.data?.payload||{};
+  const safe=['id','nome','status','empresa','cargo','nivel','linkedin','dataAdmissao','dataDemissao','pasta'];
+  const byId=new Map((current.funcionarios||[]).map((f:any)=>[String(f.id),f]));
+  const funcionarios=(incoming.funcionarios||[]).map((f:any)=>{const old=byId.get(String(f.id));if(!old)return {...f,pessoal:f.pessoal||{},bancos:f.bancos||[],documentos:f.documentos||[],projetos:f.projetos||[]};const n={...old};safe.forEach(k=>{if(k in f)n[k]=f[k];});return n;});
+  const payload={...current,...incoming,funcionarios,cargos:current.cargos||[],regrasSalario:current.regrasSalario||[],projetos:current.projetos||[],clientes:current.clientes||[]};
   const next=body.revision+1;
   if(!Number.isSafeInteger(next)) return reply(origin,400,{error:'Revisão inválida'});
   // Uma única operação condicional: duas gravações da mesma revisão não podem vencer.
   const r=await db.from('portal_rh_data')
-    .update({payload:body.data,revision:next,updated_at:new Date().toISOString(),updated_by:ctx.me.email})
+    .update({payload,revision:next,updated_at:new Date().toISOString(),updated_by:ctx.me.email})
     .eq('id',1).eq('revision',body.revision).select('revision').maybeSingle();
   if(r.error) throw r.error;
   if(!r.data) return reply(origin,409,{error:'A base foi alterada. Recarregue antes de salvar.'});

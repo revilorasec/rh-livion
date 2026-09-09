@@ -497,7 +497,7 @@ async function saveDB(){
       busy(true);try{const body=JSON.stringify(DB);const j=await rhApi("/data",{method:"PUT",body:JSON.stringify({data:DB,revision:PORTAL_DATA_META?.revision})});rawSnapshot=body;PORTAL_DATA_META={...(PORTAL_DATA_META||{}),revision:j.revision};return true;}catch(e){toast("❌ "+(e.message||"Erro ao salvar"));return false;}finally{busy(false);}
     }
     const pm=PORTAL_DATA_META?.permissions||{};
-    if(!(pm.edit&&pm.salary&&pm.bank&&pm.sensitive&&pm.documents)){ toast("🔒 Seu perfil não possui permissão para alterar a base completa do RH."); return false; }
+    if(!pm.edit){ toast("🔒 Seu perfil não possui permissão para editar funcionários."); return false; }
     busy(true);
     try{const body=JSON.stringify(DB,null,2);const j=await rhApi("/data",{method:"PUT",body:JSON.stringify({data:DB,revision:PORTAL_DATA_META?.revision})});rawSnapshot=body;PORTAL_DATA_META={...(PORTAL_DATA_META||{}),revision:j.revision};return true;}catch(e){toast("❌ "+(e.message||"Erro ao salvar"));return false;}finally{busy(false);}
   }
