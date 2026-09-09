@@ -278,7 +278,7 @@ const RH_BACKUP_FOLDER = "Backups";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
-const APP_VER = "1.10.0";
+const APP_VER = "1.11.0";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -493,6 +493,9 @@ async function saveDB(){
   // Dentro do Portal, todos os usuarios autorizados persistem pela API central do RH.
   // O OneDrive fica restrito ao modo legado, quando o app e aberto fora do Portal.
   if(PORTAL_SESSION?.token){
+    if(PORTAL_DATA_META?.employeeOnly){
+      busy(true);try{const body=JSON.stringify(DB);const j=await rhApi("/data",{method:"PUT",body:JSON.stringify({data:DB,revision:PORTAL_DATA_META?.revision})});rawSnapshot=body;PORTAL_DATA_META={...(PORTAL_DATA_META||{}),revision:j.revision};return true;}catch(e){toast("❌ "+(e.message||"Erro ao salvar"));return false;}finally{busy(false);}
+    }
     const pm=PORTAL_DATA_META?.permissions||{};
     if(!(pm.edit&&pm.salary&&pm.bank&&pm.sensitive&&pm.documents)){ toast("🔒 Seu perfil não possui permissão para alterar a base completa do RH."); return false; }
     busy(true);
@@ -633,22 +636,24 @@ function startApp(){
   document.getElementById("uname").textContent = account.name || account.username;
   document.getElementById("uav").textContent = initials(account.name || account.username);
   thumbUrl("logo.png").then(u=>{ if(u){ LOGO_URL=u; paintLogo(); } }).catch(()=>{});
+  if(PORTAL_DATA_META?.employeeOnly) S.view="ferias";
   render();
   void autoConnectFiles();
 }
 function go(v){ S.view=v; if(v!=="ficha") S.fichaId=null; render(); window.scrollTo(0,0); }
 function render(){
-  const navHtml = on => NAV.map(n=>`<button class="${S.view===n.v||(S.view==="ficha"&&n.v==="func")?"on":""}" onclick="go('${n.v}')">${ICONS[n.ic]}${on?"":"<span>"}${n.l}${on?"":"</span>"}</button>`).join("");
+  const visibleNav = PORTAL_DATA_META?.employeeOnly ? NAV.filter(n=>n.v==="ferias") : NAV;
+  const navHtml = on => visibleNav.map(n=>`<button class="${S.view===n.v||(S.view==="ficha"&&n.v==="func")?"on":""}" onclick="go('${n.v}')">${ICONS[n.ic]}${on?"":"<span>"}${n.l}${on?"":"</span>"}</button>`).join("");
   document.getElementById("snav").innerHTML = navHtml(true);
-  document.getElementById("bnav").innerHTML = NAV.map(n=>`<button class="${S.view===n.v||(S.view==="ficha"&&n.v==="func")?"on":""}" onclick="go('${n.v}')">${ICONS[n.ic]}${n.l}</button>`).join("");
+  document.getElementById("bnav").innerHTML = visibleNav.map(n=>`<button class="${S.view===n.v||(S.view==="ficha"&&n.v==="func")?"on":""}" onclick="go('${n.v}')">${ICONS[n.ic]}${n.l}</button>`).join("");
   const M = document.getElementById("main");
   const top = `<div class="mtop"><div class="mark">RH</div><div><b>Recursos Humanos</b><small>Livion Solutions</small></div></div>`;
   let html = "";
-  if(S.view==="dash") html = vDash();
+  if(S.view==="dash") html = PORTAL_DATA_META?.employeeOnly ? vFeriasEmployee() : vDash();
   else if(S.view==="func") html = vFunc();
   else if(S.view==="ficha") html = vFicha();
   else if(S.view==="proj") html = vProj();
-  else if(S.view==="ferias") html = vFerias();
+  else if(S.view==="ferias") html = PORTAL_DATA_META?.employeeOnly ? vFeriasEmployee() : vFeriasNew();
   else if(S.view==="tabela") html = vTabela();
   else if(S.view==="mapa") html = vMapa();
   else if(S.view==="cargos") html = vCargos();
@@ -866,6 +871,24 @@ function feriasDias(r){
   return Number.isNaN(a.getTime())||Number.isNaN(b.getTime())||b<a?0:Math.floor((b-a)/86400000)+1;
 }
 function feriasNome(r){ return getF(r.funcionarioId)?.nome||"Funcionário removido"; }
+function feriasFaixa(r,d){ return !d||!r.janelaInicio||!r.janelaFim||d>=r.janelaInicio&&d<=r.janelaFim; }
+function feriasPeriodos(r){ return Array.isArray(r.opcoesFuncionario)?r.opcoesFuncionario.filter(x=>x&&x.inicio&&x.fim):[]; }
+function feriasTotal(r){ return feriasPeriodos(r).reduce((s,x)=>s+feriasDias(x),0); }
+function feriasBadge(s){ return `<span class="badge ${s==="Aprovada"?"b-ok":s==="Recusada"||s==="Substituída"?"b-bad":s==="Pendente"?"b-warn":"b-gray"}">${esc(s||"Pendente")}</span>`; }
+function vFeriasEmployee(){const rows=DB.ferias||[];return `<div class="h1">Minhas férias</div><div class="sub">Você verá somente seus períodos e poderá enviar até três opções dentro da janela autorizada.</div><div class="grid">${rows.map(r=>{const total=feriasTotal(r);return `<div class="card"><div class="secttl"><h3>Janela autorizada</h3>${feriasBadge(r.status)}</div><div class="meta-grid"><div><small>Contabilidade</small><b>${fmtDate(r.janelaInicio)} a ${fmtDate(r.janelaFim)}</b></div><div><small>Status</small><b>${esc(r.status||"Planejada")}</b></div></div><div style="margin-top:12px"><b>Minhas opções</b>${feriasPeriodos(r).map(p=>`<div class="rowitem"><div class="inf"><b>${fmtDate(p.inicio)} a ${fmtDate(p.fim)} · ${feriasDias(p)} dia(s)</b><span>${feriasBadge(p.status)}</span></div></div>`).join("")||`<div class="empty">Nenhuma opção enviada</div>`}</div>${r.justificativa?`<div class="sub" style="margin-top:10px"><b>Justificativa:</b> ${esc(r.justificativa)}</div>`:""}${r.comprovante?.nome?`<div class="sub">Comprovante anexado: ${esc(r.comprovante.nome)}</div>`:""}<button class="btn" style="margin-top:12px;width:100%" onclick="A.solicitarFerias('${r.id}')">${total?"Atualizar pedido":"Escolher datas"}</button></div>`;}).join("")||`<div class="empty card">A contabilidade ainda não cadastrou uma janela de férias para você.</div>`}</div>`;}
+function vFeriasNew(){
+  const rows=[...(DB.ferias||[])].sort((a,b)=>String(a.janelaInicio||a.inicio||"9999").localeCompare(String(b.janelaInicio||b.inicio||"9999")));
+  const aprovadas=rows.filter(r=>r.status==="Aprovada").length, pendentes=rows.filter(r=>r.status!=="Aprovada"&&r.status!=="Cancelada").length;
+  return `<div class="h1">Férias</div><div class="sub">Organize a janela informada pela contabilidade, as opções do funcionário e a decisão da empresa.</div>
+  <div class="stats"><div class="stat"><div class="n">${rows.length}</div><div class="l">Cadastros</div></div><div class="stat accent"><div class="n">${aprovadas}</div><div class="l">Aprovadas</div></div><div class="stat"><div class="n">${pendentes}</div><div class="l">Pendentes</div></div></div>
+  <div class="secttl"><h3>Programação de férias</h3><button class="btn" onclick="A.editFerias(-1)">${ICONS.plus} Nova férias</button></div>
+  <div class="grid">${rows.map(r=>{const ps=feriasPeriodos(r), total=feriasTotal(r), emp=r.opcaoEmpresa, f=getF(r.funcionarioId);return `<div class="card"><div class="secttl"><div style="display:flex;align-items:center;gap:10px;min-width:0">${f?avatarHtml(f,"sm"):""}<div class="inf"><b>${esc(feriasNome(r))}</b><span>${r.periodosOficiais?.length?`${fmtDate(r.inicio)} a ${fmtDate(r.fim)} · ${r.dias||total} dias oficiais`:`${total} dia(s) escolhidos pelo funcionário`}</span></div></div>${feriasBadge(r.status||"Planejada")}</div>
+    <div class="meta-grid"><div><small>Janela da contabilidade</small><b>${fmtDate(r.janelaInicio)} a ${fmtDate(r.janelaFim)}</b></div><div><small>Total das opções</small><b>${total}/30 dias</b></div></div>
+    ${total<30?`<div class="sub" style="margin-top:8px;color:var(--warn)">Ainda faltam ${30-total} dia(s); cadastre o próximo período.</div>`:""}
+    <div style="margin-top:12px"><b>Opções do funcionário</b>${ps.map((p,i)=>`<div class="rowitem"><div class="inf"><b>${fmtDate(p.inicio)} a ${fmtDate(p.fim)} · ${feriasDias(p)} dia(s)</b><span>${feriasBadge(p.status)}</span></div><div class="acts"><button class="btn sec sm" onclick="A.aprovarFeriasOpcao('${r.id}',${i})">Aprovar</button><button class="btn ghost sm" onclick="A.recusarFeriasOpcao('${r.id}',${i})">Recusar</button></div></div>`).join("")||`<div class="empty">Nenhuma opção informada</div>`}</div>
+    <div style="margin-top:12px"><b>Escolha da empresa</b>${emp?.inicio?`<div class="rowitem"><div class="inf"><b>${fmtDate(emp.inicio)} a ${fmtDate(emp.fim)} · ${feriasDias(emp)} dia(s)</b><span>${feriasBadge(emp.status)}</span></div><div class="acts"><button class="btn sec sm" onclick="A.aprovarFeriasEmpresa('${r.id}')">Aprovar empresa</button><button class="btn ghost sm" onclick="A.recusarFeriasEmpresa('${r.id}')">Recusar</button></div></div>`:`<div class="empty">Nenhuma data da empresa informada</div>`}</div>
+    ${r.observacoes?`<div class="sub" style="margin-top:10px">${esc(r.observacoes)}</div>`:""}<div class="acts" style="margin-top:12px"><button class="btn ghost sm" onclick="A.editFerias('${r.id}')">${ICONS.edit} Editar</button><button class="btn ghost sm" onclick="A.delFerias('${r.id}')">${ICONS.del} Excluir</button></div></div>`;}).join("")||`<div class="empty card">Nenhum período cadastrado. Clique em “Nova férias” para começar.</div>`}</div>`;
+}
 function vFerias(){
   const rows=[...(DB.ferias||[])].sort((a,b)=>String(a.inicio||"9999").localeCompare(String(b.inicio||"9999")));
   const hoje=new Date().toISOString().slice(0,10);
@@ -1203,6 +1226,37 @@ A.editFerias = id=>{
     if(await saveDB())toast("✅ Férias salvas");
   });
 };
+/* fluxo completo de férias: janela contábil, até três períodos e decisões */
+A.editFerias = id=>{
+  const r=id!==-1?(DB.ferias||[]).find(x=>x.id===id):null;
+  const ps=feriasPeriodos(r||{}); while(ps.length<3) ps.push({});
+  const opts=DB.funcionarios.filter(f=>f.status!=="Demitido"&&f.status!=="Não Contratado").sort((a,b)=>a.nome.localeCompare(b.nome));
+  const ov=document.createElement("div"); ov.className="overlay";
+  ov.innerHTML=`<div class="modal"><h3>${r?"Editar férias":"Cadastrar férias"}</h3><div class="fgrid">
+    <div class="fld full"><label>Funcionário *</label><input id="fx_busca" placeholder="Pesquisar funcionário" value="${esc(getF(r?.funcionarioId)?.nome||"")}"><select id="fx_func"><option value="">Selecione</option>${opts.map(f=>`<option value="${f.id}" ${r?.funcionarioId===f.id?"selected":""}>${esc(f.nome)}${f.cargo?` · ${esc(f.cargo)}`:""}</option>`).join("")}</select></div>
+    <div class="fld"><label>Janela contábil — início *</label><input id="fx_ji" type="date" value="${esc(r?.janelaInicio||"")}"></div><div class="fld"><label>Janela contábil — fim *</label><input id="fx_jf" type="date" value="${esc(r?.janelaFim||"")}"></div>
+    <div class="fld full"><label>Períodos escolhidos pelo funcionário (até 3)</label><div id="fx_periodos">${[0,1,2].map(i=>`<div class="rowitem" style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end"><div><small>Início ${i+1}</small><input id="fx_i${i}" type="date" value="${esc(ps[i]?.inicio||"")}"></div><div><small>Fim ${i+1}</small><input id="fx_f${i}" type="date" value="${esc(ps[i]?.fim||"")}"></div><b id="fx_d${i}">0 d</b></div>`).join("")}</div><small class="sub">A segunda e a terceira linha completam automaticamente quando o total ainda não chega a 30 dias.</small></div>
+    <div class="fld full"><label>Escolha da empresa</label></div><div class="fld"><label>Início da empresa</label><input id="fx_ei" type="date" value="${esc(r?.opcaoEmpresa?.inicio||"")}"></div><div class="fld"><label>Fim da empresa</label><input id="fx_ef" type="date" value="${esc(r?.opcaoEmpresa?.fim||"")}"></div>
+    <div class="fld"><label>Aquisitivo — início</label><input id="fx_ai" type="date" value="${esc(r?.aquisitivoInicio||"")}"></div><div class="fld"><label>Aquisitivo — fim</label><input id="fx_af" type="date" value="${esc(r?.aquisitivoFim||"")}"></div><div class="fld"><label>Concessivo — início</label><input id="fx_ci" type="date" value="${esc(r?.concessivoInicio||"")}"></div><div class="fld"><label>Concessivo — fim</label><input id="fx_cf" type="date" value="${esc(r?.concessivoFim||"")}"></div>
+    <div class="fld"><label>Abono pecuniário (dias)</label><input id="fx_ab" type="number" min="0" max="10" value="${esc(r?.abonoDias??0)}"></div><div class="fld"><label>Adiantamento do 13º</label><select id="fx_13"><option value="">Não informado</option><option value="true" ${r?.adiantamento13===true?"selected":""}>Sim</option><option value="false" ${r?.adiantamento13===false&&r?"selected":""}>Não</option></select></div><div class="fld"><label>Aviso comunicado em</label><input id="fx_av" type="date" value="${esc(r?.avisoEm||"")}"></div><div class="fld"><label>Pagamento previsto/realizado</label><input id="fx_pg" type="date" value="${esc(r?.pagamentoEm||"")}"></div><div class="fld"><label>Status</label><select id="fx_st">${FERIAS_STATUS.map(s=>`<option ${s===(r?.status||"Planejada")?"selected":""}>${s}</option>`).join("")}</select></div><div class="fld full"><label>Observações</label><textarea id="fx_obs">${esc(r?.observacoes||"")}</textarea></div>
+  </div><div class="acts"><button class="btn ghost" data-x>Cancelar</button><button class="btn" data-ok>Salvar</button></div></div>`;
+  document.body.appendChild(ov);
+  const q=s=>ov.querySelector(s), calc=()=>{[0,1,2].forEach(i=>{const a=q(`#fx_i${i}`).value,b=q(`#fx_f${i}`).value;q(`#fx_d${i}`).textContent=(a&&b?feriasDias({inicio:a,fim:b}):0)+" d";});};
+  q("#fx_busca").oninput=()=>{const t=q("#fx_busca").value.toLowerCase();[...q("#fx_func").options].forEach(o=>o.hidden=!!o.value&&!o.textContent.toLowerCase().includes(t));};
+  ["#fx_i0","#fx_f0","#fx_i1","#fx_f1","#fx_i2","#fx_f2"].forEach(s=>q(s).oninput=calc); calc();
+  q("[data-x]").onclick=()=>ov.remove(); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
+  q("[data-ok]").onclick=async()=>{ const v={funcionarioId:q("#fx_func").value,janelaInicio:q("#fx_ji").value,janelaFim:q("#fx_jf").value,aquisitivoInicio:q("#fx_ai").value||null,aquisitivoFim:q("#fx_af").value||null,concessivoInicio:q("#fx_ci").value||null,concessivoFim:q("#fx_cf").value||null,abonoDias:Number(q("#fx_ab").value||0),adiantamento13:q("#fx_13").value==="true",avisoEm:q("#fx_av").value||null,pagamentoEm:q("#fx_pg").value||null,status:q("#fx_st").value,observacoes:q("#fx_obs").value.trim()||null};
+    if(!v.funcionarioId||!v.janelaInicio||!v.janelaFim||v.janelaFim<v.janelaInicio){toast("Informe funcionário e janela contábil válida");return;}
+    v.opcoesFuncionario=[]; for(let i=0;i<3;i++){const a=q(`#fx_i${i}`).value,b=q(`#fx_f${i}`).value;if(!a&&!b)continue;if(!a||!b||b<a||!feriasFaixa(v,a)||!feriasFaixa(v,b)){toast(`Período ${i+1} fora da janela contábil ou inválido`);return;}v.opcoesFuncionario.push({inicio:a,fim:b,dias:feriasDias({inicio:a,fim:b}),status:r?.opcoesFuncionario?.[i]?.status||"Pendente"});}
+    const ei=q("#fx_ei").value,ef=q("#fx_ef").value;if((ei||ef)&&(!ei||!ef||ef<ei||!feriasFaixa(v,ei)||!feriasFaixa(v,ef))){toast("A escolha da empresa deve estar dentro da janela contábil");return;}v.opcaoEmpresa=ei&&ef?{inicio:ei,fim:ef,dias:feriasDias({inicio:ei,fim:ef}),status:r?.opcaoEmpresa?.status||"Pendente"}:null;
+    const total=v.opcoesFuncionario.reduce((s,x)=>s+x.dias,0); v.dias=0; v.inicio=null;v.fim=null;v.periodosOficiais=[];v.origemAprovacao=null; if(r)Object.assign(r,v); else DB.ferias.push({id:uid(),criadoEm:new Date().toISOString(),...v}); if(await saveDB()){ov.remove();toast("✅ Férias salvas");render();}
+  };
+};
+A.aprovarFeriasOpcao=async(id,i)=>{const r=DB.ferias.find(x=>x.id===id),p=feriasPeriodos(r)[i];if(!r||!p)return;if(feriasTotal(r)!==30){toast("As opções do funcionário precisam totalizar 30 dias");return;}r.opcoesFuncionario.forEach((x,j)=>x.status=j===i?"Aprovada":(x.status||"Pendente"));r.periodosOficiais=feriasPeriodos(r);r.inicio=r.periodosOficiais.map(x=>x.inicio).sort()[0];r.fim=r.periodosOficiais.map(x=>x.fim).sort().slice(-1)[0];r.dias=30;r.origemAprovacao="Funcionario";r.status="Aprovada";if(await saveDB()){toast("✅ Opção aprovada e férias confirmadas");render();}};
+A.recusarFeriasOpcao=async(id,i)=>{const r=DB.ferias.find(x=>x.id===id);if(!r?.opcoesFuncionario?.[i])return;r.opcoesFuncionario[i].status="Recusada";if(await saveDB()){toast("Opção recusada");render();}};
+A.aprovarFeriasEmpresa=async id=>{const r=DB.ferias.find(x=>x.id===id),p=r?.opcaoEmpresa;if(!p||feriasDias(p)!==30){toast("A escolha da empresa precisa ter exatamente 30 dias");return;}p.status="Aprovada";r.opcoesFuncionario=(r.opcoesFuncionario||[]).map(x=>({...x,status:"Substituída"}));r.periodosOficiais=[p];r.inicio=p.inicio;r.fim=p.fim;r.dias=30;r.origemAprovacao="Empresa";r.status="Aprovada";if(await saveDB()){toast("✅ Escolha da empresa aprovada");render();}};
+A.recusarFeriasEmpresa=async id=>{const r=DB.ferias.find(x=>x.id===id);if(!r?.opcaoEmpresa)return;r.opcaoEmpresa.status="Recusada";if(await saveDB()){toast("Escolha da empresa recusada");render();}};
+A.solicitarFerias=id=>{const r=DB.ferias.find(x=>x.id===id);if(!r)return;const ov=document.createElement("div");ov.className="overlay";const ps=feriasPeriodos(r);while(ps.length<3)ps.push({});ov.innerHTML=`<div class="modal"><h3>Solicitar minhas férias</h3><p class="sub">Janela autorizada: ${fmtDate(r.janelaInicio)} a ${fmtDate(r.janelaFim)}</p><div class="fgrid">${[0,1,2].map(i=>`<div class="fld"><label>Início ${i+1}</label><input id="sx_i${i}" type="date" value="${esc(ps[i]?.inicio||"")}"></div><div class="fld"><label>Fim ${i+1}</label><input id="sx_f${i}" type="date" value="${esc(ps[i]?.fim||"")}"></div>`).join("")}<div class="fld full"><label>Justificativa do pedido</label><textarea id="sx_j" placeholder="Explique o motivo, se necessário">${esc(r.justificativa||"")}</textarea></div><div class="fld full"><label>Comprovante (opcional)</label><input id="sx_file" type="file" accept="image/*,.pdf"></div></div><div class="acts"><button class="btn ghost" data-x>Cancelar</button><button class="btn" data-ok>Enviar pedido</button></div></div>`;document.body.appendChild(ov);ov.querySelector("[data-x]").onclick=()=>ov.remove();ov.querySelector("[data-ok]").onclick=async()=>{const arr=[];for(let i=0;i<3;i++){const a=ov.querySelector(`#sx_i${i}`).value,b=ov.querySelector(`#sx_f${i}`).value;if(!a&&!b)continue;if(!a||!b||b<a||!feriasFaixa(r,a)||!feriasFaixa(r,b)){toast(`Período ${i+1} fora da janela autorizada`);return;}arr.push({inicio:a,fim:b,dias:feriasDias({inicio:a,fim:b}),status:"Pendente"});}if(!arr.length){toast("Informe pelo menos um período");return;}r.opcoesFuncionario=arr;r.justificativa=ov.querySelector("#sx_j").value.trim()||null;const file=ov.querySelector("#sx_file").files[0];if(file){if(file.size>2*1024*1024){toast("O comprovante deve ter até 2 MB");return;}r.comprovante={nome:file.name,tipo:file.type,tamanho:file.size,dados:await new Promise(ok=>{const fr=new FileReader();fr.onload=()=>ok(fr.result);fr.readAsDataURL(file);})};}r.status="Solicitada";if(await saveDB()){ov.remove();toast("✅ Pedido enviado");render();}};};
 A.mudarLogo = ()=>{
   const inp = document.getElementById("fileGen");
   inp.accept = "image/*"; inp.value = "";
@@ -1632,6 +1686,9 @@ function normalizeDB(){
     if(r.abonoDias===undefined) r.abonoDias=0;
     if(r.adiantamento13===undefined) r.adiantamento13=false;
     if(!r.dias) r.dias=feriasDias(r);
+    if(!Array.isArray(r.opcoesFuncionario)) r.opcoesFuncionario=r.inicio&&r.fim?[{inicio:r.inicio,fim:r.fim,dias:feriasDias(r),status:r.status==="Aprovada"?"Aprovada":"Pendente"}]:[];
+    if(r.opcaoEmpresa===undefined) r.opcaoEmpresa=null;
+    if(!Array.isArray(r.periodosOficiais)) r.periodosOficiais=r.status==="Aprovada"&&r.inicio&&r.fim?[{inicio:r.inicio,fim:r.fim,dias:feriasDias(r),origem:r.origemAprovacao||"Legado"}]:[];
   });
   DB.funcionarios.forEach(f=>{
     const p = f.pessoal || (f.pessoal = {});
@@ -1847,3 +1904,4 @@ boot();
 </script>
 </body>
 </html>
+

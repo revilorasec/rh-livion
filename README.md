@@ -1,8 +1,8 @@
-# RH Livion 1.10.0
+# RH Livion 1.11.0
 
 Cadastros operacionais no Supabase (rh-api / portal_rh_data); anexos no OneDrive via Microsoft Graph. Abrir pelo Portal Livion: https://portal.livionsolutions.com.br/.
 
-A área **Férias** centraliza funcionário, período aquisitivo, período concessivo, datas de início e fim, dias calculados, abono pecuniário, adiantamento do 13º, status, aviso, pagamento e observações. Os registros ficam em `DB.ferias` e também entram na exportação Excel.
+A área **Férias** centraliza a janela autorizada pela contabilidade, até três períodos escolhidos pelo funcionário, a escolha da empresa, aprovação ou recusa, dias calculados, justificativa e comprovante, além dos dados legais e administrativos. Usuários externos vinculados ao e-mail profissional veem somente as próprias férias e podem enviar pedidos dentro da janela. Os registros ficam em `DB.ferias` e também entram na exportação Excel.
 
 ## Operação
 
@@ -23,3 +23,4 @@ Publicar HTML e backend juntos; preferir HTML primeiro (backend anterior aceita 
 Referências: https://supabase.com/docs/reference/javascript/update e https://learn.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0.
 
 Não incluir dados.json, arquivos de funcionários, configurações Azure ou credenciais neste repositório.
+

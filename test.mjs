@@ -78,7 +78,7 @@ test('sem autenticação: 401; usuário inativo: 403',async()=>{
 });
 test('HTML candidato mantém baseline exceto controle da revisão e tem JS válido',()=>{
   const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
-  assert.ok(html.includes('const APP_VER = "1.10.0"'));
+  assert.ok(html.includes('const APP_VER = "1.11.0"'));
   for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) if(match[1].trim()) new vm.Script(match[1]);
 });
 
@@ -178,3 +178,4 @@ test('integração: bootstrap seguido de edição usa a revisão recém-criada',
   ui.context.DB.funcionarios.push({id:'synthetic'});
   assert.equal(await ui.save(),true);assert.equal(f.state.row.revision,2);
 });
+
