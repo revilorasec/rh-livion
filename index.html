@@ -1398,9 +1398,10 @@ A.upCurriculo = id=>{
 
 /* --- foto (com redimensionamento) --- */
 A.trocarFoto = id=>{
-  const f=getF(id); const inp=document.getElementById("fileFoto"); inp.value="";
-  inp.onchange = async ()=>{
-    const file = inp.files[0]; if(!file) return;
+  const f=getF(id); const camera=document.getElementById("fileFoto"), gallery=document.getElementById("fileGen");
+  const ov=document.createElement("div");ov.className="overlay";ov.innerHTML=`<div class="modal"><h3>Adicionar foto</h3><p class="sub">Escolha como deseja adicionar a foto do funcionário.</p><div class="acts" style="flex-direction:column"><button class="btn" data-camera>📷 Abrir câmera</button><button class="btn sec" data-gallery>🖼️ Escolher da galeria ou computador</button><button class="btn ghost" data-x>Cancelar</button></div></div>`;document.body.appendChild(ov);
+  const process=async file=>{
+    if(!file){ov.remove();return;}
     busy(true);
     try{
       const blob = await resizeImg(file, 1100, .86);
@@ -1410,9 +1411,11 @@ A.trocarFoto = id=>{
       thumbCache.clear();
       if(await saveDB()) toast("✅ Foto atualizada");
     }catch(e){ toast("❌ "+e.message); }
-    busy(false); render();
+    busy(false); ov.remove(); render();
   };
-  inp.click();
+  camera.value="";gallery.value="";camera.accept="image/*";camera.setAttribute("capture","environment");gallery.accept="image/*";gallery.removeAttribute("capture");
+  camera.onchange=()=>process(camera.files[0]);gallery.onchange=()=>process(gallery.files[0]);
+  ov.querySelector("[data-camera]").onclick=()=>camera.click();ov.querySelector("[data-gallery]").onclick=()=>gallery.click();ov.querySelector("[data-x]").onclick=()=>ov.remove();ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
 };
 function resizeImg(file, max, q, mime){
   mime = mime || "image/jpeg";
