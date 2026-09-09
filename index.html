@@ -1283,8 +1283,6 @@ const empresaOpts = ()=> (DB.empresas||[]).map(e=>[e,e]);
 const fDados = f => [
   {k:"nome", label:"Nome completo", req:1, full:1},
   {k:"status", label:"Status", type:"select", opts:STATUS_OPTS},
-  {k:"perfilRh", label:"Acesso no RH", type:"select", opts:[["OPERACIONAL","Usuário operacional"],["VISUALIZADOR","Visualizador — somente próprios dados"]]},
-  {k:"loginEmail", label:"E-mail de login do Portal", type:"email", ph:"Usado para vincular o acesso do funcionário"},
   {k:"empresa", label:"Empresa contratante", type:"select", opts:[["",""],...empresaOpts()]},
   {k:"cargo", label:"Cargo", type:"select", opts:[["",""],...cargosOpts()]},
   {k:"nivel", label:"Nível", type:"select", opts:[["",""],...Array.from({length:9},(_,i)=>[String(i+1),String(i+1)])]},
@@ -1295,7 +1293,7 @@ const fDados = f => [
 A.novoFunc = ()=> openForm("Novo funcionário", fDados({}), {status:"Ativo"}, async v=>{
   const id = nextFunId();
   const f = { id, nome:v.nome, pasta:`${id} - ${safeName(v.nome)}`, foto:null, curriculo:null,
-    status:v.status, perfilRh:v.perfilRh||"OPERACIONAL", loginEmail:v.loginEmail||null, empresa:v.empresa, cargo:v.cargo, nivel:v.nivel, linkedin:v.linkedin,
+    status:v.status, empresa:v.empresa, cargo:v.cargo, nivel:v.nivel, linkedin:v.linkedin,
     dataAdmissao:v.dataAdmissao, dataDemissao:v.dataDemissao, avaliacao:null, obsAvaliacao:null, motivosObs:null, observacoes:null,
     pessoal:{}, bancos:[], documentos:[], projetos:[] };
   DB.funcionarios.push(f);
