@@ -405,9 +405,15 @@ async function autoConnectFiles(){
 }
 async function ensureFiles(){
   if(!canReadFiles())throw new Error('Seu perfil não tem acesso aos arquivos do RH.');
-  if(FOLDER)return;
-  if(!graphReady)graphReady=(async()=>{await initFileAuth();await resolveFolder();})().finally(()=>{graphReady=null;});
-  return graphReady;
+  if(FOLDER?.driveId&&FOLDER?.id)return FOLDER;
+  if(graphReady){await graphReady;if(FOLDER?.driveId&&FOLDER?.id)return FOLDER;}
+  graphReady=(async()=>{
+    await initFileAuth();
+    await resolveFolder();
+    if(!FOLDER?.driveId||!FOLDER?.id)throw new Error('A pasta do RH não retornou uma unidade válida do OneDrive. Reconecte os arquivos.');
+    return FOLDER;
+  })();
+  try{return await graphReady;}finally{graphReady=null;}
 }
 async function token(){
   if(PORTAL_SESSION){
@@ -430,7 +436,7 @@ async function gfetch(path, opts={}, retry=true){
 }
 async function gjson(path, opts){ const r = await gfetch(path, opts); if(!r.ok){ const b=await r.text(); const err=new Error("Graph "+r.status+": "+b.slice(0,200)); err.status=r.status; throw err; } return r.status===204?null:r.json(); }
 function encPath(rel){ return rel.split("/").map(encodeURIComponent).join("/"); }
-function iPath(rel){ return `/drives/${FOLDER.driveId}/items/${FOLDER.id}` + (rel?`:/${encPath(rel)}:`:""); }
+function iPath(rel){ if(!FOLDER?.driveId||!FOLDER?.id)throw new Error('A conexão com os arquivos do RH não está pronta. Autorize os arquivos e tente novamente.');return `/drives/${FOLDER.driveId}/items/${FOLDER.id}` + (rel?`:/${encPath(rel)}:`:""); }
 async function ensureFolder(rel){
   if(!FOLDER) await ensureFiles();
   const parts=String(rel||"").replace(/\\/g,"/").split("/").filter(Boolean);
@@ -461,9 +467,9 @@ async function resolveFolder(){
   if(!hit){
     throw new Error(`A pasta “${folderPath}” não foi encontrada no seu OneDrive. Se ela foi compartilhada com você, adicione um atalho da pasta “${parts.at(-1)||folderPath}” a Meus arquivos.`);
   }
-  FOLDER = hit.remoteItem
-    ? { driveId: hit.remoteItem.parentReference.driveId, id: hit.remoteItem.id }
-    : { driveId: hit.parentReference.driveId, id: hit.id };
+  const driveId=hit.remoteItem?.parentReference?.driveId||hit.parentReference?.driveId, itemId=hit.remoteItem?.id||hit.id;
+  if(!driveId||!itemId)throw new Error('O OneDrive não retornou a identificação completa da pasta do RH.');
+  FOLDER={driveId,id:itemId};
 }
 async function loadDB(){
   let dataPath=RH_DATA_PATH, meta;
