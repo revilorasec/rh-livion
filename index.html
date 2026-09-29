@@ -432,6 +432,7 @@ async function gjson(path, opts){ const r = await gfetch(path, opts); if(!r.ok){
 function encPath(rel){ return rel.split("/").map(encodeURIComponent).join("/"); }
 function iPath(rel){ return `/drives/${FOLDER.driveId}/items/${FOLDER.id}` + (rel?`:/${encPath(rel)}:`:""); }
 async function ensureFolder(rel){
+  if(!FOLDER) await ensureFiles();
   const parts=String(rel||"").replace(/\\/g,"/").split("/").filter(Boolean);
   for(let i=0;i<parts.length;i++){
     const current=parts.slice(0,i+1).join("/"), parent=parts.slice(0,i).join("/");
