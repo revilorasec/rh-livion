@@ -381,14 +381,30 @@ async function initFileAuth(){
     msalApp=new msal.PublicClientApplication({auth:{clientId:cfg.cid,authority:'https://login.microsoftonline.com/'+cfg.tid,redirectUri:AUTH_REDIRECT_URI},cache:{cacheLocation:'localStorage'}});
   }
 }
-function fileAccount(){return msalApp?.getAllAccounts().find(a=>a.localAccountId===PORTAL_DATA_META?.user?.id);}
+function portalFileEmail(){return String(PORTAL_DATA_META?.user?.email||account?.username||"").trim().toLowerCase();}
+function accountMatchesPortal(a){
+  if(!a)return false;
+  if(a.localAccountId&&a.localAccountId===PORTAL_DATA_META?.user?.id)return true;
+  const expected=portalFileEmail(), claims=a.idTokenClaims||{};
+  return !!expected&&[a.username,claims.preferred_username,claims.email,claims.upn].some(v=>String(v||"").trim().toLowerCase()===expected);
+}
+function fileAccount(){return msalApp?.getAllAccounts().find(accountMatchesPortal);}
+async function requestFileToken(){
+  await initFileAuth();
+  const a=fileAccount();
+  if(a){
+    msalApp.setActiveAccount(a);
+    try{return (await msalApp.acquireTokenSilent({scopes:SCOPES,account:a})).accessToken;}catch{}
+  }
+  const result=await msalApp.acquireTokenPopup({scopes:SCOPES,account:a||undefined,loginHint:portalFileEmail()||undefined});
+  if(!accountMatchesPortal(result.account))throw new Error('Use a mesma conta corporativa do Portal.');
+  msalApp.setActiveAccount(result.account);FOLDER=null;graphReady=null;filesState="ready";
+  return result.accessToken;
+}
 async function connectFiles(){
   filesState="connecting"; render();
   try{
-    await initFileAuth();
-    const result=await msalApp.acquireTokenPopup({scopes:SCOPES,account:fileAccount(),loginHint:PORTAL_DATA_META?.user?.email});
-    if(result.account?.localAccountId!==PORTAL_DATA_META?.user?.id)throw new Error('Use a mesma conta corporativa do Portal.');
-    msalApp.setActiveAccount(result.account);FOLDER=null;graphReady=null;
+    await requestFileToken();
     await ensureFiles();filesState="ready";thumbCache.clear();urlCache.clear();render();toast('Arquivos conectados.');
   }catch(e){filesState="needs-consent";render();toast(e.message||'Não foi possível conectar os arquivos.');}
 }
@@ -1259,7 +1275,10 @@ A.editFerias = id=>{
   q("#fx_busca").oninput=()=>{const t=q("#fx_busca").value.toLowerCase();[...q("#fx_func").options].forEach(o=>o.hidden=!!o.value&&!o.textContent.toLowerCase().includes(t));};
   ["#fx_i0","#fx_f0","#fx_i1","#fx_f1","#fx_i2","#fx_f2"].forEach(s=>q(s).oninput=calc); const calcJanela=()=>{const v=q("#fx_ji").value;if(!v){q("#fx_jf").value="";return;}const d=new Date(v+"T12:00:00");d.setFullYear(d.getFullYear()+1);d.setDate(d.getDate()-1);q("#fx_jf").value=d.toISOString().slice(0,10);};q("#fx_ji").oninput=calcJanela;calcJanela();calc();
   q("[data-x]").onclick=()=>ov.remove(); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
-  q("[data-ok]").onclick=async()=>{ const v={funcionarioId:q("#fx_func").value,janelaInicio:q("#fx_ji").value,janelaFim:q("#fx_jf").value,aquisitivoInicio:q("#fx_ai").value||null,aquisitivoFim:q("#fx_af").value||null,concessivoInicio:q("#fx_ci").value||null,concessivoFim:q("#fx_cf").value||null,abonoDias:Number(q("#fx_ab").value||0),adiantamento13:q("#fx_13").value==="true",avisoEm:q("#fx_av").value||null,pagamentoEm:q("#fx_pg").value||null,status:q("#fx_st").value,observacoes:q("#fx_obs").value.trim()||null};
+  q("[data-ok]").onclick=async()=>{
+    const temNovos=[0,1,2].some(i=>q(`#fx_an${i}`).files.length);
+    if(temNovos){try{await requestFileToken();}catch(e){filesState="needs-consent";toast("❌ "+(e.message||"Não foi possível autorizar os arquivos"));return;}}
+    const v={funcionarioId:q("#fx_func").value,janelaInicio:q("#fx_ji").value,janelaFim:q("#fx_jf").value,aquisitivoInicio:q("#fx_ai").value||null,aquisitivoFim:q("#fx_af").value||null,concessivoInicio:q("#fx_ci").value||null,concessivoFim:q("#fx_cf").value||null,abonoDias:Number(q("#fx_ab").value||0),adiantamento13:q("#fx_13").value==="true",avisoEm:q("#fx_av").value||null,pagamentoEm:q("#fx_pg").value||null,status:q("#fx_st").value,observacoes:q("#fx_obs").value.trim()||null};
     if(!v.funcionarioId||!v.janelaInicio||!v.janelaFim||v.janelaFim<v.janelaInicio){toast("Informe funcionário e janela contábil válida");return;}
     const funcionario=getF(v.funcionarioId); v.opcoesFuncionario=[];
     for(let i=0;i<3;i++){
