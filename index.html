@@ -280,7 +280,7 @@ const RH_BACKUP_FOLDER = "Backups";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
-const APP_VER = "1.11.0";
+const APP_VER = "1.17.0";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -325,8 +325,11 @@ const RH_API="https://kvfjjtkwxxbvzlicwnrz.supabase.co/functions/v1/rh-api";
 let PORTAL_SESSION=null, PORTAL_BOOTSTRAP_PENDING=false, PORTAL_DATA_META=null;
 function rhApi(path,opt={}){
   if(!PORTAL_SESSION?.token) throw new Error("Sessão do Portal indisponível");
-  return fetch(RH_API+path,{...opt,headers:{Authorization:"Bearer "+PORTAL_SESSION.token,"Content-Type":"application/json",...(opt.headers||{})},cache:"no-store"}).then(async r=>{const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b.error||("HTTP "+r.status));return b;});
+  const headers={Authorization:"Bearer "+PORTAL_SESSION.token,...(opt.headers||{})};
+  if(opt.body!=null&&!(opt.body instanceof FormData)&&!headers["Content-Type"])headers["Content-Type"]="application/json";
+  return fetch(RH_API+path,{...opt,headers,cache:"no-store"}).then(async r=>{const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b.error||("HTTP "+r.status));return b;});
 }
+async function uploadVacationAttachment(file,vacationId,period){const body=new FormData();body.append("file",file,file.name);body.append("vacationId",vacationId);body.append("period",String(period));const result=await rhApi("/vacation-files",{method:"POST",body});return result.file;}
 function waitPortalSession(ms=7000){
   if(PORTAL_SESSION) return Promise.resolve(PORTAL_SESSION);
   return new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error("Sessão do Portal não recebida")),ms);const h=e=>{if(e.origin!=="https://portal.livionsolutions.com.br"&&e.origin!=="https://revilorasec.github.io")return;if(e.data?.type!=="PORTAL_SESSION"||!e.data?.token)return;clearTimeout(t);window.removeEventListener("message",h);PORTAL_SESSION=e.data;resolve(PORTAL_SESSION)};window.addEventListener("message",h);});
@@ -1276,8 +1279,7 @@ A.editFerias = id=>{
   ["#fx_i0","#fx_f0","#fx_i1","#fx_f1","#fx_i2","#fx_f2"].forEach(s=>q(s).oninput=calc); const calcJanela=()=>{const v=q("#fx_ji").value;if(!v){q("#fx_jf").value="";return;}const d=new Date(v+"T12:00:00");d.setFullYear(d.getFullYear()+1);d.setDate(d.getDate()-1);q("#fx_jf").value=d.toISOString().slice(0,10);};q("#fx_ji").oninput=calcJanela;calcJanela();calc();
   q("[data-x]").onclick=()=>ov.remove(); ov.addEventListener("click",e=>{if(e.target===ov)ov.remove();});
   q("[data-ok]").onclick=async()=>{
-    const temNovos=[0,1,2].some(i=>q(`#fx_an${i}`).files.length);
-    if(temNovos){try{await requestFileToken();}catch(e){filesState="needs-consent";toast("❌ "+(e.message||"Não foi possível autorizar os arquivos"));return;}}
+    const feriasId=r?.id||uid(),novosEnviados=[];
     const v={funcionarioId:q("#fx_func").value,janelaInicio:q("#fx_ji").value,janelaFim:q("#fx_jf").value,aquisitivoInicio:q("#fx_ai").value||null,aquisitivoFim:q("#fx_af").value||null,concessivoInicio:q("#fx_ci").value||null,concessivoFim:q("#fx_cf").value||null,abonoDias:Number(q("#fx_ab").value||0),adiantamento13:q("#fx_13").value==="true",avisoEm:q("#fx_av").value||null,pagamentoEm:q("#fx_pg").value||null,status:q("#fx_st").value,observacoes:q("#fx_obs").value.trim()||null};
     if(!v.funcionarioId||!v.janelaInicio||!v.janelaFim||v.janelaFim<v.janelaInicio){toast("Informe funcionário e janela contábil válida");return;}
     const funcionario=getF(v.funcionarioId); v.opcoesFuncionario=[];
@@ -1290,21 +1292,16 @@ A.editFerias = id=>{
       if(anexos.length+novos.length>2){toast(`O período ${i+1} aceita no máximo 2 arquivos`);return;}
       if(novos.some(file=>file.size>10*1024*1024)){toast(`Cada arquivo do período ${i+1} deve ter no máximo 10 MB`);return;}
       if(novos.length){
-        if(!funcionario?.pasta){toast("O funcionário precisa ter uma pasta configurada para receber anexos");return;}
         try{
-          const pastaId=r?.id||v.janelaInicio||uid(), pastaRel=`Funcionarios/${funcionario.pasta}/Ferias/${pastaId}`; await ensureFolder(pastaRel);
           for(const file of novos){
-            const ext=(file.name.split(".").pop()||"bin").toLowerCase(), base=safeName(file.name.replace(/\.[^.]+$/,"" )).replace(/\s+/g,"_")||"arquivo";
-            const fn=`periodo_${i+1}_${a}_${base}_${uid().slice(0,4)}.${ext}`, rel=`Ferias/${pastaId}/${fn}`;
-            await uploadFile(`Funcionarios/${funcionario.pasta}/${rel}`,file,file.type);
-            anexos.push({id:uid(),nome:file.name,arquivo:rel,tipo:file.type||"application/octet-stream",tamanho:file.size,adicionadoEm:new Date().toISOString()});
+            const anexo=await uploadVacationAttachment(file,feriasId,i+1);anexos.push(anexo);novosEnviados.push(anexo);
           }
         }catch(e){toast("❌ Não foi possível enviar o anexo: "+(e.message||"erro no upload"));return;}
       }
       v.opcoesFuncionario.push({inicio:a,fim:b,dias:feriasDias({inicio:a,fim:b}),situacao:q(`#fx_c${i}`).value,observacao:q(`#fx_o${i}`).value.trim()||null,status:anterior?.status||"Pendente",anexos});
     }
     const ei=q("#fx_ei").value,ef=q("#fx_ef").value;if((ei||ef)&&(!ei||!ef||ef<ei||!feriasFaixa(v,ei)||!feriasFaixa(v,ef))){toast("A escolha da empresa deve estar dentro da janela contábil");return;}v.opcaoEmpresa=ei&&ef?{inicio:ei,fim:ef,dias:feriasDias({inicio:ei,fim:ef}),status:r?.opcaoEmpresa?.status||"Pendente"}:null;
-    const total=v.opcoesFuncionario.reduce((s,x)=>s+x.dias,0); v.dias=0; v.inicio=null;v.fim=null;v.periodosOficiais=[];v.origemAprovacao=null; if(r)Object.assign(r,v); else DB.ferias.push({id:uid(),criadoEm:new Date().toISOString(),...v}); if(await saveDB()){ov.remove();toast("✅ Férias salvas");render();}
+    const total=v.opcoesFuncionario.reduce((s,x)=>s+x.dias,0); v.dias=0; v.inicio=null;v.fim=null;v.periodosOficiais=[];v.origemAprovacao=null; if(r)Object.assign(r,v); else DB.ferias.push({id:feriasId,criadoEm:new Date().toISOString(),...v}); if(await saveDB()){ov.remove();toast("✅ Férias salvas");render();}else{for(const a of novosEnviados){rhApi("/vacation-files?path="+encodeURIComponent(a.arquivo),{method:"DELETE"}).catch(()=>{});}}
   };
 };
 A.aprovarFeriasOpcao=async(id,i)=>{const r=DB.ferias.find(x=>x.id===id),p=feriasPeriodos(r)[i];if(!r||!p)return;r.opcoesFuncionario[i].status="Aprovada";r.opcoesFuncionario[i].situacao="Fechada";r.periodosOficiais=r.opcoesFuncionario.filter(x=>x.status==="Aprovada");r.inicio=r.periodosOficiais.map(x=>x.inicio).sort()[0]||null;r.fim=r.periodosOficiais.map(x=>x.fim).sort().slice(-1)[0]||null;r.dias=r.periodosOficiais.reduce((s,x)=>s+feriasDias(x),0);r.origemAprovacao="Funcionario";r.status="Aprovada";if(await saveDB()){toast("✅ Período aprovado");render();}};
@@ -1333,19 +1330,20 @@ A.mudarLogo = ()=>{
   inp.click();
 };
 A.abrirArq = async (fid, rel)=>{ busy(true); try{ const f=getF(fid); const u = await fileUrl(`Funcionarios/${f.pasta}/${rel}`); if(u)window.open(u,"_blank","noopener"); }catch(e){ toast("❌ Arquivo não encontrado no OneDrive"); } busy(false); };
-A.abrirAnexoFerias = async (rid,aid)=>{const r=(DB.ferias||[]).find(x=>x.id===rid),p=r?.opcoesFuncionario?.find(x=>x.anexos?.some(a=>a.id===aid)),a=p?.anexos?.find(x=>x.id===aid);if(!r||!a?.arquivo)return;await A.abrirArq(r.funcionarioId,a.arquivo);};
+A.abrirAnexoFerias = async (rid,aid)=>{const r=(DB.ferias||[]).find(x=>x.id===rid),p=r?.opcoesFuncionario?.find(x=>x.anexos?.some(a=>a.id===aid)),a=p?.anexos?.find(x=>x.id===aid);if(!r||!a?.arquivo)return;if(a.storage==="supabase"){busy(true);try{const result=await rhApi("/vacation-files?path="+encodeURIComponent(a.arquivo));window.open(result.url,"_blank","noopener");}catch(e){toast("❌ "+(e.message||"Arquivo não encontrado"));}finally{busy(false);}return;}await A.abrirArq(r.funcionarioId,a.arquivo);};
 A.excluirAnexoFerias = (ev,rid,aid)=>{
   ev?.preventDefault();ev?.stopPropagation();
   const r=(DB.ferias||[]).find(x=>x.id===rid),p=r?.opcoesFuncionario?.find(x=>x.anexos?.some(a=>a.id===aid)),idx=p?.anexos?.findIndex(a=>a.id===aid)??-1,a=idx>=0?p.anexos[idx]:null,f=r?getF(r.funcionarioId):null;
   if(!r||!p||!a||!f)return;
-  confirmar(`Excluir somente o arquivo “${a.nome||"anexo"}”? Ele será enviado para a lixeira do OneDrive.`,async()=>{
+  const central=a.storage==="supabase";
+  confirmar(`Excluir somente o arquivo “${a.nome||"anexo"}”?${central?" Esta ação remove o arquivo do armazenamento privado do RH.":" Ele será enviado para a lixeira do OneDrive."}`,async()=>{
     try{
-      await requestFileToken();
+      if(!central)await requestFileToken();
       p.anexos.splice(idx,1);
       if(!await saveDB()){p.anexos.splice(idx,0,a);return;}
-      busy(true);await ensureFiles();
-      const resp=await gfetch(iPath(`Funcionarios/${f.pasta}/${a.arquivo}`),{method:"DELETE"});
-      if(!resp.ok&&resp.status!==404)throw new Error(`Não foi possível excluir no OneDrive (${resp.status})`);
+      busy(true);
+      if(central)await rhApi("/vacation-files?path="+encodeURIComponent(a.arquivo),{method:"DELETE"});
+      else{await ensureFiles();const resp=await gfetch(iPath(`Funcionarios/${f.pasta}/${a.arquivo}`),{method:"DELETE"});if(!resp.ok&&resp.status!==404)throw new Error(`Não foi possível excluir no OneDrive (${resp.status})`);}
       ev?.currentTarget?.closest(".ferias-anexo-item")?.remove();toast("✅ Arquivo excluído");
     }catch(e){
       if(!p.anexos.some(x=>x.id===aid)){p.anexos.splice(Math.min(idx,p.anexos.length),0,a);await saveDB();}
