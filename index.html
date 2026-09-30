@@ -280,7 +280,7 @@ const RH_BACKUP_FOLDER = "Backups";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
-const APP_VER = "1.17.0";
+const APP_VER = "1.17.1";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -1282,6 +1282,7 @@ A.editFerias = id=>{
     const feriasId=r?.id||uid(),novosEnviados=[];
     const v={funcionarioId:q("#fx_func").value,janelaInicio:q("#fx_ji").value,janelaFim:q("#fx_jf").value,aquisitivoInicio:q("#fx_ai").value||null,aquisitivoFim:q("#fx_af").value||null,concessivoInicio:q("#fx_ci").value||null,concessivoFim:q("#fx_cf").value||null,abonoDias:Number(q("#fx_ab").value||0),adiantamento13:q("#fx_13").value==="true",avisoEm:q("#fx_av").value||null,pagamentoEm:q("#fx_pg").value||null,status:q("#fx_st").value,observacoes:q("#fx_obs").value.trim()||null};
     if(!v.funcionarioId||!v.janelaInicio||!v.janelaFim||v.janelaFim<v.janelaInicio){toast("Informe funcionário e janela contábil válida");return;}
+    for(let i=0;i<3;i++){const a=q(`#fx_i${i}`).value,b=q(`#fx_f${i}`).value,novos=[...q(`#fx_an${i}`).files],anterior=r?.opcoesFuncionario?.find(x=>x.inicio===a&&x.fim===b)||r?.opcoesFuncionario?.[i],existentes=Array.isArray(anterior?.anexos)?anterior.anexos.length:0;if(!a&&!b){if(novos.length){toast(`Informe as datas do período ${i+1} antes de anexar arquivos`);return;}continue;}if(!a||!b||b<a||!feriasFaixa(v,a)||!feriasFaixa(v,b)){toast(`Período ${i+1} fora da janela contábil ou inválido`);return;}if(existentes+novos.length>2){toast(`O período ${i+1} aceita no máximo 2 arquivos`);return;}if(novos.some(file=>file.size>10*1024*1024)){toast(`Cada arquivo do período ${i+1} deve ter no máximo 10 MB`);return;}}
     const funcionario=getF(v.funcionarioId); v.opcoesFuncionario=[];
     for(let i=0;i<3;i++){
       const a=q(`#fx_i${i}`).value,b=q(`#fx_f${i}`).value,novos=[...q(`#fx_an${i}`).files];
@@ -1296,7 +1297,7 @@ A.editFerias = id=>{
           for(const file of novos){
             const anexo=await uploadVacationAttachment(file,feriasId,i+1);anexos.push(anexo);novosEnviados.push(anexo);
           }
-        }catch(e){toast("❌ Não foi possível enviar o anexo: "+(e.message||"erro no upload"));return;}
+        }catch(e){for(const enviado of novosEnviados){rhApi("/vacation-files?path="+encodeURIComponent(enviado.arquivo),{method:"DELETE"}).catch(()=>{});}toast("❌ Não foi possível enviar o anexo: "+(e.message||"erro no upload"));return;}
       }
       v.opcoesFuncionario.push({inicio:a,fim:b,dias:feriasDias({inicio:a,fim:b}),situacao:q(`#fx_c${i}`).value,observacao:q(`#fx_o${i}`).value.trim()||null,status:anterior?.status||"Pendente",anexos});
     }
