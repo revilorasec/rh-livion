@@ -280,7 +280,7 @@ const RH_BACKUP_FOLDER = "Backups";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
-const APP_VER = "1.17.1";
+const APP_VER = "1.18.0";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -330,6 +330,7 @@ function rhApi(path,opt={}){
   return fetch(RH_API+path,{...opt,headers,cache:"no-store"}).then(async r=>{const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b.error||("HTTP "+r.status));return b;});
 }
 async function uploadVacationAttachment(file,vacationId,period){const body=new FormData();body.append("file",file,file.name);body.append("vacationId",vacationId);body.append("period",String(period));const result=await rhApi("/vacation-files",{method:"POST",body});return result.file;}
+async function uploadStaffCurriculum(file,employeeId){const body=new FormData();body.append("file",file,file.name);body.append("employeeId",employeeId);const result=await rhApi("/staff-files",{method:"POST",body});return result.file;}
 function waitPortalSession(ms=7000){
   if(PORTAL_SESSION) return Promise.resolve(PORTAL_SESSION);
   return new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error("Sessão do Portal não recebida")),ms);const h=e=>{if(e.origin!=="https://portal.livionsolutions.com.br"&&e.origin!=="https://revilorasec.github.io")return;if(e.data?.type!=="PORTAL_SESSION"||!e.data?.token)return;clearTimeout(t);window.removeEventListener("message",h);PORTAL_SESSION=e.data;resolve(PORTAL_SESSION)};window.addEventListener("message",h);});
@@ -974,7 +975,7 @@ function vFicha(){
         <button class="iconbtn" onclick="A.delDoc('${f.id}',${i})">${ICONS.del}</button></div>`).join(""):`<div class="empty">Nenhum documento — adicione RG, CTPS, ASO, contratos…</div>`}</div>
       <div class="card" style="margin-top:12px"><div class="secttl"><h3>Currículo</h3>
         <div style="display:flex;gap:8px">${f.curriculo?`<button class="btn sec sm" onclick="A.abrirArq('${f.id}','${esc(f.curriculo)}')">${ICONS.open} Abrir</button>`:""}
-        <button class="btn ghost sm" onclick="A.upCurriculo('${f.id}')">${ICONS.doc} ${f.curriculo?"Substituir":"Enviar"}</button></div></div>
+        <button class="btn ghost sm" onclick="A.upCurriculo('${f.id}')">${ICONS.doc} ${f.curriculo?"Substituir":"Adicionar"}</button></div></div>
         ${f.curriculo?"":`<div class="empty">Nenhum currículo anexado</div>`}</div>`;
   }
   if(S.tab==="proj"){
@@ -1330,7 +1331,7 @@ A.mudarLogo = ()=>{
   };
   inp.click();
 };
-A.abrirArq = async (fid, rel)=>{ busy(true); try{ const f=getF(fid); const u = await fileUrl(`Funcionarios/${f.pasta}/${rel}`); if(u)window.open(u,"_blank","noopener"); }catch(e){ toast("❌ Arquivo não encontrado no OneDrive"); } busy(false); };
+A.abrirArq = async (fid, rel)=>{busy(true);try{if(String(rel||"").startsWith("supabase:")){const path=String(rel).slice(9),result=await rhApi("/staff-files?path="+encodeURIComponent(path));window.open(result.url,"_blank","noopener");return;}const f=getF(fid),u=await fileUrl(`Funcionarios/${f.pasta}/${rel}`);if(u)window.open(u,"_blank","noopener");}catch(e){toast("❌ "+(e.message||"Arquivo não encontrado"));}finally{busy(false);}};
 A.abrirAnexoFerias = async (rid,aid)=>{const r=(DB.ferias||[]).find(x=>x.id===rid),p=r?.opcoesFuncionario?.find(x=>x.anexos?.some(a=>a.id===aid)),a=p?.anexos?.find(x=>x.id===aid);if(!r||!a?.arquivo)return;if(a.storage==="supabase"){busy(true);try{const result=await rhApi("/vacation-files?path="+encodeURIComponent(a.arquivo));window.open(result.url,"_blank","noopener");}catch(e){toast("❌ "+(e.message||"Arquivo não encontrado"));}finally{busy(false);}return;}await A.abrirArq(r.funcionarioId,a.arquivo);};
 A.excluirAnexoFerias = (ev,rid,aid)=>{
   ev?.preventDefault();ev?.stopPropagation();
@@ -1366,15 +1367,34 @@ const fDados = f => [
   {k:"dataDemissao", label:"Data de desligamento", type:"date"},
   {k:"linkedin", label:"LinkedIn", full:1, ph:"https://linkedin.com/in/…"},
 ];
-A.novoFunc = ()=> openForm("Novo funcionário", fDados({}), {status:"Ativo"}, async v=>{
+const fCadastro = ()=>[
+  {k:"nome", label:"Nome completo", req:1, full:1},
+  {k:"status", label:"Status", type:"select", opts:STATUS_OPTS},
+  {k:"empresa", label:"Empresa contratante", type:"select", opts:[["",""],...empresaOpts()]},
+  {k:"cargo", label:"Cargo", type:"select", opts:[["",""],...cargosOpts()]},
+  {k:"nivel", label:"Nível", type:"select", opts:[["",""],...Array.from({length:9},(_,i)=>[String(i+1),String(i+1)])]},
+  {k:"telefone", label:"Telefone", mask:"tel", ph:"(11) 99999-9999"},
+  {k:"email", label:"E-mail", type:"email", ph:"nome@empresa.com.br"},
+  {k:"_curriculo", label:"Adicionar currículo", type:"file", full:1, accept:".pdf,.doc,.docx,image/*"},
+  {k:"dataAdmissao", label:"Data de admissão", type:"date"},
+  {k:"dataDemissao", label:"Data de desligamento", type:"date"},
+  {k:"linkedin", label:"LinkedIn", full:1, ph:"https://linkedin.com/in/…"},
+];
+A.novoFunc = ()=> openForm("Novo funcionário ou candidato", fCadastro(), {status:"Ativo"}, async v=>{
   const id = nextFunId();
   const f = { id, nome:v.nome, pasta:`${id} - ${safeName(v.nome)}`, foto:null, curriculo:null,
     status:v.status, empresa:v.empresa, cargo:v.cargo, nivel:v.nivel, linkedin:v.linkedin,
     dataAdmissao:v.dataAdmissao, dataDemissao:v.dataDemissao, avaliacao:null, obsAvaliacao:null, motivosObs:null, observacoes:null,
-    pessoal:{}, bancos:[], documentos:[], projetos:[] };
-  DB.funcionarios.push(f);
-  DB.funcionarios.sort((a,b)=>a.nome.localeCompare(b.nome));
-  if(await saveDB()){ toast("✅ "+v.nome+" cadastrado"); A.abrirFicha(id); }
+    pessoal:{telefonePessoal:v.telefone||null,emailPessoal:v.email||null,dependentes:[],emergencias:[],saude:{doencas:[],medicamentos:[],alergias:[]}}, bancos:[], documentos:[], projetos:[] };
+  try{
+    if(v._curriculo){
+      if(v._curriculo.size>10*1024*1024){toast("O currículo deve ter no máximo 10 MB");return false;}
+      busy(true);const uploaded=await uploadStaffCurriculum(v._curriculo,id);f.curriculo="supabase:"+uploaded.arquivo;
+    }
+    DB.funcionarios.push(f);DB.funcionarios.sort((a,b)=>a.nome.localeCompare(b.nome));
+    if(await saveDB()){toast("✅ "+v.nome+" cadastrado");A.abrirFicha(id);return true;}
+    DB.funcionarios=DB.funcionarios.filter(x=>x.id!==id);return false;
+  }catch(e){toast("❌ Não foi possível cadastrar: "+(e.message||"erro"));return false;}finally{busy(false);}
 });
 A.editDados = id=>{ const f=getF(id); if(!f){toast("Funcionário não encontrado. Recarregue os dados.");return;} if(!f.pessoal)f.pessoal={};if(!Array.isArray(f.bancos))f.bancos=[];if(!Array.isArray(f.documentos))f.documentos=[];if(!Array.isArray(f.projetos))f.projetos=[]; openForm("Editar dados", fDados(f), f, async v=>{ Object.assign(f, v); if(await saveDB()) toast("✅ Salvo"); }); };
 A.editNotas = id=>{ const f=getF(id); openForm("Anotações e avaliação", [
@@ -1459,12 +1479,11 @@ A.upCurriculo = id=>{
   inp.accept=".pdf,.doc,.docx,image/*"; inp.value="";
   inp.onchange = async ()=>{
     const file = inp.files[0]; if(!file) return;
+    if(file.size>10*1024*1024){toast("O currículo deve ter no máximo 10 MB");return;}
     busy(true);
     try{
-      const ext=file.name.split(".").pop();
-      const fn = `Curriculo_${new Date().toISOString().slice(0,10)}.${ext}`;
-      await uploadFile(`Funcionarios/${f.pasta}/Curriculo/${fn}`, file, file.type);
-      f.curriculo = "Curriculo/"+fn;
+      const uploaded=await uploadStaffCurriculum(file,f.id);
+      f.curriculo="supabase:"+uploaded.arquivo;
       urlCache.clear();
       if(await saveDB()) toast("✅ Currículo enviado");
     }catch(e){ toast("❌ "+e.message); }
