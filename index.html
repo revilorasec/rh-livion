@@ -34,6 +34,9 @@ img{display:block}
 .sidebar .logo{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:4px 8px 18px;font-weight:800;font-size:1.02rem;letter-spacing:.2px}
 .sidebar .logo .mark{width:100%;height:74px;border-radius:12px;background:linear-gradient(135deg,#1b3a6b,#1c86c8);display:grid;place-items:center;font-size:1rem;font-weight:800;color:#fff}
 .sidebar .logo small{display:block;font-weight:500;color:#8da2cf;font-size:.7rem;margin-top:1px}
+body.portal-embedded .sidebar .logo .mark,
+body.portal-embedded .mtop .mark,
+body.portal-embedded .gate .mark{display:none}
 .snav{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .snav button{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:11px;color:#b6c4e6;font-weight:600;font-size:.93rem;text-align:left}
 .snav button svg{width:20px;height:20px;flex:none}
@@ -280,7 +283,7 @@ const RH_BACKUP_FOLDER = "Backups";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
-const APP_VER = "1.18.1";
+const APP_VER = "1.18.2";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -346,7 +349,7 @@ async function bootFromPortal(){
   }catch(e){ console.error(e); showFatal("Não foi possível validar o acesso pelo Portal: "+esc(e.message||String(e))); }
 }
 async function boot(){
-  if(window.self!==window.top) return bootFromPortal();
+  if(window.self!==window.top){document.body.classList.add('portal-embedded');return bootFromPortal()}
   gate(`<div class="card"><div class="mark">RH</div><h1>Recursos Humanos</h1><p>Acesse pelo Portal Livion para usar a base atualizada.</p><a class="btn" href="https://portal.livionsolutions.com.br/">Abrir Portal Livion</a></div>`);
 }
 
