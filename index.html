@@ -194,6 +194,7 @@ body.portal-embedded .gate .mark{display:none}
 .gate .btn{width:100%;padding:13px}
 .gate .tip{margin-top:16px;font-size:.76rem;color:var(--mut)}
 .portal-return{position:fixed;top:14px;right:16px;z-index:90;display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 13px;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--brand);box-shadow:var(--shadow);font-size:.8rem;font-weight:750;text-decoration:none}.portal-return:hover{background:var(--brand-soft)}@media(max-width:860px){.portal-return{top:16px;right:14px;padding:8px 10px;font-size:.72rem}}
+.employee-scope{display:flex;align-items:center;gap:10px;background:#e8f3ff;border:1px solid #9cc8f0;color:#163d6b;border-radius:13px;padding:11px 14px;margin-bottom:14px;font-size:.85rem;font-weight:700}.employee-scope svg{width:20px;height:20px;flex:none}.employee-hero{display:flex;align-items:center;gap:16px}.employee-hero .who{flex:1;min-width:0}.employee-hero h2{font-size:1.25rem;line-height:1.2}.employee-hero p{color:var(--mut);font-size:.86rem;margin-top:3px}.employee-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:14px}.employee-action{display:flex;align-items:center;gap:10px;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;color:var(--brand);font-weight:700}.employee-action svg{width:22px;height:22px;flex:none}.employee-doc-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.employee-year{font-size:.82rem;color:var(--mut);font-weight:800;margin:14px 0 7px}.readonly-note{font-size:.78rem;color:var(--mut);margin-top:10px}.employee-upload{margin-bottom:14px}.employee-upload .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}@media(max-width:520px){.employee-hero{align-items:flex-start}.employee-hero .av.big{width:62px;height:62px}.employee-doc-actions{width:100%;justify-content:flex-start}.rowitem.employee-doc{flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -283,7 +284,7 @@ const RH_BACKUP_FOLDER = "Backups";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
-const APP_VER = "1.18.2";
+const APP_VER = "1.19.0";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -333,7 +334,8 @@ function rhApi(path,opt={}){
   return fetch(RH_API+path,{...opt,headers,cache:"no-store"}).then(async r=>{const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b.error||("HTTP "+r.status));return b;});
 }
 async function uploadVacationAttachment(file,vacationId,period){const body=new FormData();body.append("file",file,file.name);body.append("vacationId",vacationId);body.append("period",String(period));const result=await rhApi("/vacation-files",{method:"POST",body});return result.file;}
-async function uploadStaffCurriculum(file,employeeId){const body=new FormData();body.append("file",file,file.name);body.append("employeeId",employeeId);const result=await rhApi("/staff-files",{method:"POST",body});return result.file;}
+async function uploadStaffFile(file,employeeId,category="curriculos"){const body=new FormData();body.append("file",file,file.name);body.append("employeeId",employeeId);body.append("category",category);const result=await rhApi("/staff-files",{method:"POST",body});return result.file;}
+async function uploadStaffCurriculum(file,employeeId){return uploadStaffFile(file,employeeId,"curriculos");}
 function waitPortalSession(ms=7000){
   if(PORTAL_SESSION) return Promise.resolve(PORTAL_SESSION);
   return new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error("Sessão do Portal não recebida")),ms);const h=e=>{if(e.origin!=="https://portal.livionsolutions.com.br"&&e.origin!=="https://revilorasec.github.io")return;if(e.data?.type!=="PORTAL_SESSION"||!e.data?.token)return;clearTimeout(t);window.removeEventListener("message",h);PORTAL_SESSION=e.data;resolve(PORTAL_SESSION)};window.addEventListener("message",h);});
@@ -378,7 +380,7 @@ async function legacyBoot(){
   }
 }
 let graphReady=null, filesState="idle";
-function canReadFiles(){return PORTAL_DATA_META?.userType==='INTERNO' && PORTAL_DATA_META?.permissions?.documents===true;}
+function canReadFiles(){return !PORTAL_DATA_META?.employeeOnly && PORTAL_DATA_META?.userType==='INTERNO' && PORTAL_DATA_META?.permissions?.documents===true;}
 function canWriteFiles(){const p=PORTAL_DATA_META?.permissions||{};return canReadFiles()&&p.edit&&p.salary&&p.bank&&p.sensitive;}
 async function initFileAuth(){
   if(!canReadFiles())throw new Error('Seu perfil não tem acesso aos arquivos do RH.');
@@ -525,9 +527,7 @@ async function saveDB(){
   // Dentro do Portal, todos os usuarios autorizados persistem pela API central do RH.
   // O OneDrive fica restrito ao modo legado, quando o app e aberto fora do Portal.
   if(PORTAL_SESSION?.token){
-    if(PORTAL_DATA_META?.employeeOnly){
-      busy(true);try{const body=JSON.stringify(DB);const j=await rhApi("/data",{method:"PUT",body:JSON.stringify({data:DB,revision:PORTAL_DATA_META?.revision})});rawSnapshot=body;PORTAL_DATA_META={...(PORTAL_DATA_META||{}),revision:j.revision};return true;}catch(e){toast("❌ "+(e.message||"Erro ao salvar"));return false;}finally{busy(false);}
-    }
+    if(PORTAL_DATA_META?.employeeOnly){toast("🔒 Seus dados oficiais são somente para consulta.");return false;}
     const pm=PORTAL_DATA_META?.permissions||{};
     if(!pm.edit){ toast("🔒 Seu perfil não possui permissão para editar funcionários."); return false; }
     busy(true);
@@ -662,30 +662,39 @@ const NAV = [
   {v:"cargos",l:"Cargos",       ic:"cash"},
   {v:"mais",  l:"Mais",         ic:"more"},
 ];
+const EMP_NAV = [
+  {v:"employee-home",l:"Início",ic:"home"},
+  {v:"employee-data",l:"Meus dados",ic:"team"},
+  {v:"employee-vacations",l:"Férias",ic:"calendar"},
+  {v:"employee-documents",l:"Documentos",ic:"doc"},
+  {v:"employee-payslips",l:"Holerites",ic:"cash"},
+];
 function startApp(){
   document.getElementById("gate").classList.add("hide");
   document.getElementById("shell").classList.add("on");
   document.getElementById("uname").textContent = account.name || account.username;
   document.getElementById("uav").textContent = initials(account.name || account.username);
   thumbUrl("logo.png").then(u=>{ if(u){ LOGO_URL=u; paintLogo(); } }).catch(()=>{});
-  if(PORTAL_DATA_META?.employeeOnly) S.view="ferias";
+  if(PORTAL_DATA_META?.employeeOnly) S.view="employee-home";
   render();
   void autoConnectFiles();
 }
 function go(v){ S.view=v; if(v!=="ficha") S.fichaId=null; render(); window.scrollTo(0,0); }
 function render(){
-  const visibleNav = PORTAL_DATA_META?.employeeOnly ? NAV.filter(n=>n.v==="ferias") : NAV;
+  const employeeOnly=!!PORTAL_DATA_META?.employeeOnly;
+  const visibleNav = employeeOnly ? EMP_NAV : NAV;
   const navHtml = on => visibleNav.map(n=>`<button class="${S.view===n.v||(S.view==="ficha"&&n.v==="func")?"on":""}" onclick="go('${n.v}')">${ICONS[n.ic]}${on?"":"<span>"}${n.l}${on?"":"</span>"}</button>`).join("");
   document.getElementById("snav").innerHTML = navHtml(true);
   document.getElementById("bnav").innerHTML = visibleNav.map(n=>`<button class="${S.view===n.v||(S.view==="ficha"&&n.v==="func")?"on":""}" onclick="go('${n.v}')">${ICONS[n.ic]}${n.l}</button>`).join("");
   const M = document.getElementById("main");
   const top = `<div class="mtop"><div class="mark">RH</div><div><b>Recursos Humanos</b><small>Livion Solutions</small></div></div>`;
   let html = "";
-  if(S.view==="dash") html = PORTAL_DATA_META?.employeeOnly ? vFeriasEmployee() : vDash();
+  if(employeeOnly) html=vEmployeePortal(S.view);
+  else if(S.view==="dash") html = vDash();
   else if(S.view==="func") html = vFunc();
   else if(S.view==="ficha") html = vFicha();
   else if(S.view==="proj") html = vProj();
-  else if(S.view==="ferias") html = PORTAL_DATA_META?.employeeOnly ? vFeriasEmployee() : vFeriasNew();
+  else if(S.view==="ferias") html = vFeriasNew();
   else if(S.view==="tabela") html = vTabela();
   else if(S.view==="mapa") html = vMapa();
   else if(S.view==="cargos") html = vCargos();
@@ -909,6 +918,26 @@ function feriasTotal(r){ return feriasPeriodos(r).reduce((s,x)=>s+feriasDias(x),
 function feriasBadge(s){ return `<span class="badge ${s==="Aprovada"?"b-ok":s==="Recusada"||s==="Substituída"?"b-bad":s==="Pendente"?"b-warn":"b-gray"}">${esc(s||"Pendente")}</span>`; }
 function feriasAnexosButtons(r,p){const anexos=Array.isArray(p?.anexos)?p.anexos:[];return anexos.length?`<div class="ferias-anexo-lista" style="margin-top:5px">${anexos.map((a,j)=>`<span class="ferias-anexo-item"><button class="btn sec sm" onclick="A.abrirAnexoFerias('${r.id}','${a.id}')">📎 ${esc(a.nome||`Arquivo ${j+1}`)}</button><button class="ferias-anexo-excluir" title="Excluir somente este arquivo" aria-label="Excluir ${esc(a.nome||`arquivo ${j+1}`)}" onclick="A.excluirAnexoFerias(event,'${r.id}','${a.id}')">×</button></span>`).join("")}</div>`:"";}
 function vFeriasEmployee(){const rows=DB.ferias||[],f=DB.funcionarios[0];return `<div class="h1">Minhas férias</div><div class="sub">${esc(f?.nome||account?.name||"")} · você verá somente seus próprios dados.</div><div class="grid">${rows.map(r=>{const total=feriasTotal(r),locked=["Solicitada","Aprovada","Em férias","Concluída"].includes(r.status);return `<div class="card"><div class="secttl"><h3>Janela autorizada</h3>${feriasBadge(r.status)}</div><div class="meta-grid"><div><small>Contabilidade</small><b>${fmtDate(r.janelaInicio)} a ${fmtDate(r.janelaFim)}</b></div><div><small>Status</small><b>${esc(r.status||"Planejada")}</b></div></div><div style="margin-top:12px"><b>Minhas opções</b>${feriasPeriodos(r).map(p=>`<div class="rowitem"><div class="inf"><b>${fmtDate(p.inicio)} a ${fmtDate(p.fim)} · ${feriasDias(p)} dia(s)</b><span>${feriasBadge(p.status)}</span></div></div>`).join("")||`<div class="empty">Nenhuma opção enviada</div>`}</div>${r.justificativa?`<div class="sub" style="margin-top:10px"><b>Justificativa:</b> ${esc(r.justificativa)}</div>`:""}${r.comprovante?.nome?`<div class="sub">Comprovante anexado: ${esc(r.comprovante.nome)}</div>`:""}<div class="acts" style="margin-top:12px">${locked?`<span class="sub">Pedido enviado e bloqueado para alteração.</span>`:`<button class="btn" style="flex:1" onclick="A.solicitarFerias('${r.id}')">${total?"Atualizar pedido":"Escolher datas"}</button>`}<button class="btn sec sm" onclick="A.adicionarDocumentoFuncionario()">+ Documento</button></div></div>`;}).join("")||`<div class="empty card">A contabilidade ainda não cadastrou uma janela de férias para você.</div>`}</div>`;}
+
+function employeeScope(){return `<div class="employee-scope">${ICONS.alert}<span>Área individual: você está vendo somente seus próprios dados.</span></div>`;}
+function employeeFilePath(value){const v=String(value||"");return v.startsWith("supabase:")?v.slice(9):v;}
+function employeeCentralFile(value){return /^(curriculos|funcionarios)\//.test(employeeFilePath(value));}
+function employeePayslip(d){return /holerite|contracheque|recibo de pagamento/i.test(String(d?.categoria||d?.tipo||d?.titulo||""));}
+function employeeDocs(){const f=DB.funcionarios?.[0]||{},docs=(f.documentos||[]).filter(d=>!employeePayslip(d));if(f.curriculo)docs.push({id:"curriculo",tipo:"Currículo",nome:"Currículo",arquivo:f.curriculo,storage:String(f.curriculo).startsWith("supabase:")?"supabase":"legacy"});return docs;}
+function employeePayslips(){const byId=new Map();[...(DB.holerites||[]),...(DB.funcionarios?.[0]?.documentos||[]).filter(employeePayslip)].forEach(d=>byId.set(String(d.id||d.arquivo||Math.random()),d));return [...byId.values()].sort((a,b)=>String(b.competencia||b.emissao||b.adicionadoEm||"").localeCompare(String(a.competencia||a.emissao||a.adicionadoEm||"")));}
+function employeeFileActions(d,kind="staff"){
+  const value=d?.arquivo;if(!value)return `<span class="badge b-warn">Aguardando arquivo</span>`;
+  if(kind==="vacation"){const p=employeeFilePath(value);return `<div class="employee-doc-actions"><button class="btn sec sm" onclick="A.employeeOpenVacation('${encodeURIComponent(p)}',false)">${ICONS.open} Abrir</button><button class="btn ghost sm" onclick="A.employeeOpenVacation('${encodeURIComponent(p)}',true)">Baixar</button></div>`;}
+  if(!employeeCentralFile(value))return `<span class="badge b-gray" title="Peça ao RH para migrar este arquivo antigo">Arquivo administrativo</span>`;
+  const p=employeeFilePath(value);return `<div class="employee-doc-actions"><button class="btn sec sm" onclick="A.employeeOpenFile('${encodeURIComponent(p)}',false)">${ICONS.open} Abrir</button><button class="btn ghost sm" onclick="A.employeeOpenFile('${encodeURIComponent(p)}',true)">Baixar</button></div>`;
+}
+function employeeDocRow(d,kind="staff"){return `<div class="rowitem employee-doc"><div class="inf"><b>${esc(d.tipo||d.categoria||d.nome||"Documento")}</b><span>${esc(d.nome||"")}${d.competencia?` · Competência ${esc(d.competencia)}`:d.emissao?` · ${fmtDate(d.emissao)}`:""}</span>${d.status?`<span>Status: ${esc(d.status)}</span>`:""}</div>${employeeFileActions(d,kind)}</div>`;}
+function vEmployeeHome(){const f=DB.funcionarios?.[0]||{},docs=employeeDocs().length,pays=employeePayslips().length,vacs=(DB.ferias||[]).length;return `${employeeScope()}<div class="card"><div class="employee-hero"><div class="av big">${initials(f.nome)}</div><div class="who"><h2>${esc(f.nome||account?.name||"Funcionário")}</h2><p>${esc([f.cargo,f.nivel?`Nível ${f.nivel}`:null,f.empresa].filter(Boolean).join(" · ")||"Cadastro do funcionário")}</p>${sBadge(f.status)}</div></div><div class="quick"><div class="q"><small>Admissão</small><b>${fmtDate(f.dataAdmissao)}</b></div><div class="q"><small>Tempo de empresa</small><b>${tempoEmpresa(f.dataAdmissao,f.dataDemissao)||"—"}</b></div><div class="q"><small>Documentos</small><b>${docs}</b></div><div class="q"><small>Holerites</small><b>${pays}</b></div></div><div class="employee-actions"><button class="employee-action" onclick="go('employee-data')">${ICONS.team} Meus dados</button><button class="employee-action" onclick="go('employee-vacations')">${ICONS.calendar} Minhas férias (${vacs})</button><button class="employee-action" onclick="go('employee-documents')">${ICONS.doc} Documentos</button><button class="employee-action" onclick="go('employee-payslips')">${ICONS.cash} Holerites</button></div></div>`;}
+function vEmployeeData(){const f=DB.funcionarios?.[0]||{},p=f.pessoal||{};const professional=[["Nome",f.nome],["Empresa",f.empresa],["Cargo",f.cargo],["Nível",f.nivel],["Departamento",f.departamento],["Vínculo",f.tipoVinculo],["Admissão",fmtDate(f.dataAdmissao)],["Status",f.status]];const personal=[["Telefone pessoal",p.telefonePessoal],["Telefone profissional",p.telefoneProfissional],["E-mail pessoal",p.emailPessoal],["E-mail profissional",p.emailProfissional],["Nascimento",p.nascimento?fmtDate(p.nascimento):null],["CPF",p.cpf],["RG",p.rg],["Endereço",p.endereco],["Estado civil",p.estadoCivil],["Tipo sanguíneo",p.tipoSanguineo]];return `${employeeScope()}<div class="h1">Meus dados</div><div class="sub">Informações oficiais cadastradas pelo RH.</div><div class="card"><div class="secttl"><h3>Dados profissionais</h3><span class="badge b-info">Somente leitura</span></div><div class="dl">${professional.map(([l,v])=>`<div class="it"><small>${l}</small><span>${nv(v)}</span></div>`).join("")}</div></div><div class="card" style="margin-top:12px"><div class="secttl"><h3>Dados pessoais</h3><span class="badge b-info">Somente leitura</span></div><div class="dl">${personal.map(([l,v])=>`<div class="it"><small>${l}</small><span>${nv(v)}</span></div>`).join("")}</div></div><div class="readonly-note">Se alguma informação estiver incorreta, solicite a correção ao RH.</div>`;}
+function vEmployeeVacations(){const rows=DB.ferias||[];return `${employeeScope()}<div class="h1">Minhas férias</div><div class="sub">Acompanhe somente os seus períodos e aprovações.</div><div class="grid">${rows.map(r=>`<div class="card"><div class="secttl"><h3>${esc(r.status||"Planejada")}</h3>${feriasBadge(r.status)}</div><div class="meta-grid"><div><small>Janela da contabilidade</small><b>${fmtDate(r.janelaInicio)} a ${fmtDate(r.janelaFim)}</b></div><div><small>Período oficial</small><b>${fmtDate(r.inicio)} a ${fmtDate(r.fim)}</b></div></div><div style="margin-top:12px"><b>Períodos registrados</b>${feriasPeriodos(r).map(p=>`<div class="rowitem"><div class="inf"><b>${fmtDate(p.inicio)} a ${fmtDate(p.fim)} · ${feriasDias(p)} dia(s)</b><span>${feriasBadge(p.status)}${p.situacao?` · ${esc(p.situacao)}`:""}</span></div></div>${(p.anexos||[]).map(a=>employeeDocRow({...a,tipo:a.nome||"Anexo de férias"},"vacation")).join("")}`).join("")||`<div class="empty">Nenhum período informado</div>`}</div>${r.justificativa?`<div class="sub" style="margin-top:10px;margin-bottom:0"><b>Justificativa:</b> ${esc(r.justificativa)}</div>`:""}</div>`).join("")||`<div class="empty card">Nenhum período de férias cadastrado para você.</div>`}</div>`;}
+function vEmployeeDocuments(){const docs=employeeDocs();return `${employeeScope()}<div class="h1">Meus documentos</div><div class="sub">Consulte, baixe ou envie documentos para o seu cadastro. Arquivos enviados não podem ser apagados pelo funcionário.</div><div class="card employee-upload"><div class="secttl"><h3>Enviar documento</h3><button class="btn" onclick="A.employeeUploadDocument()">${ICONS.plus} Anexar arquivo</button></div><div class="readonly-note">Formatos: PDF, JPG, PNG, WebP, DOC ou DOCX · máximo de 10 MB.</div></div><div class="card">${docs.map(d=>employeeDocRow(d)).join("")||`<div class="empty">Nenhum documento disponível.</div>`}</div>`;}
+function vEmployeePayslips(){const list=employeePayslips(),groups={};list.forEach(d=>{const key=String(d.competencia||d.emissao||d.adicionadoEm||"Sem data").slice(0,4)||"Sem data";(groups[key]=groups[key]||[]).push(d);});return `${employeeScope()}<div class="h1">Meus holerites</div><div class="sub">Holerites e recibos de pagamento organizados por ano.</div>${Object.keys(groups).sort().reverse().map(y=>`<div class="employee-year">${esc(y)}</div><div class="card">${groups[y].map(d=>employeeDocRow(d)).join("")}</div>`).join("")||`<div class="empty card">Nenhum holerite disponível no seu cadastro.</div>`}`;}
+function vEmployeePortal(view){if(view==="employee-data")return vEmployeeData();if(view==="employee-vacations")return vEmployeeVacations();if(view==="employee-documents")return vEmployeeDocuments();if(view==="employee-payslips")return vEmployeePayslips();return vEmployeeHome();}
 function vFeriasNew(){
   const rows=[...(DB.ferias||[])].sort((a,b)=>String(a.janelaInicio||a.inicio||"9999").localeCompare(String(b.janelaInicio||b.inicio||"9999")));
   const aprovadas=rows.filter(r=>r.status==="Aprovada").length, pendentes=rows.filter(r=>r.status!=="Aprovada"&&r.status!=="Cancelada").length;
@@ -1006,7 +1035,8 @@ function vFicha(){
         <div class="role">${esc(f.cargo||"Sem cargo")}${f.nivel?` · Nível ${esc(f.nivel)}`:""} · ${esc(f.empresa||"—")}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">${sBadge(f.status)}
           ${f.linkedin?`<a class="badge b-info" href="${esc(f.linkedin)}" target="_blank">LinkedIn ↗</a>`:""}
-          <span class="badge b-gray">${f.id}</span></div>
+          <span class="badge b-gray">${f.id}</span>
+          ${f.perfilRh==="FUNCIONARIO"?`<span class="badge b-ok">Acesso individual · somente os próprios dados</span>`:`<span class="badge b-gray">Acesso individual desativado</span>`}</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px">
         <button class="btn sec sm" onclick="A.editDados('${f.id}')">${ICONS.edit} Editar</button>
@@ -1018,6 +1048,7 @@ function vFicha(){
       <div class="q"><small>Tempo de empresa</small><b>${tempoEmpresa(f.dataAdmissao,f.dataDemissao)||"—"}</b></div>
       ${f.dataDemissao?`<div class="q"><small>Desligamento</small><b>${fmtDate(f.dataDemissao)}</b></div>`:""}
       <div class="q"><small>Salário (tabela)</small><b>${money(sal)}</b></div>
+      <div class="q"><small>E-mail de acesso ao RH</small><b>${f.perfilRh==="FUNCIONARIO"?esc(f.loginEmail||"Não informado"):"Não habilitado"}</b></div>
     </div>
   </div>
   <div class="tabs">${tabs.map(([k,l])=>`<button class="${S.tab===k?"on":""}" onclick="A.tab('${k}')">${l}</button>`).join("")}</div>
@@ -1335,6 +1366,12 @@ A.mudarLogo = ()=>{
   inp.click();
 };
 A.abrirArq = async (fid, rel)=>{busy(true);try{if(String(rel||"").startsWith("supabase:")){const path=String(rel).slice(9),result=await rhApi("/staff-files?path="+encodeURIComponent(path));window.open(result.url,"_blank","noopener");return;}const f=getF(fid),u=await fileUrl(`Funcionarios/${f.pasta}/${rel}`);if(u)window.open(u,"_blank","noopener");}catch(e){toast("❌ "+(e.message||"Arquivo não encontrado"));}finally{busy(false);}};
+A.employeeOpenFile=async(encoded,download=false)=>{const popup=window.open("about:blank","_blank");try{busy(true);const path=decodeURIComponent(encoded),result=await rhApi("/staff-files?path="+encodeURIComponent(path)+(download?"&download=1":""));if(popup){popup.opener=null;popup.location=result.url;}else location.href=result.url;}catch(e){popup?.close();toast("❌ "+(e.message||"Arquivo não encontrado"));}finally{busy(false);}};
+A.employeeOpenVacation=async(encoded,download=false)=>{const popup=window.open("about:blank","_blank");try{busy(true);const path=decodeURIComponent(encoded),result=await rhApi("/vacation-files?path="+encodeURIComponent(path)+(download?"&download=1":""));if(popup){popup.opener=null;popup.location=result.url;}else location.href=result.url;}catch(e){popup?.close();toast("❌ "+(e.message||"Arquivo não encontrado"));}finally{busy(false);}};
+A.employeeUploadDocument=()=>openForm("Anexar documento",[
+  {k:"tipo",label:"Tipo do documento",type:"select",opts:["Documento pessoal","Atestado","Certificado / Curso","Comprovante","Outro"],full:1},
+  {k:"_file",label:"Arquivo",type:"file",accept:".pdf,.doc,.docx,image/*",req:1,full:1},
+],{tipo:"Documento pessoal"},async v=>{const file=v._file;if(!file)return false;if(file.size>10*1024*1024){toast("O arquivo deve ter no máximo 10 MB");return false;}busy(true);try{const body=new FormData();body.append("file",file,file.name);body.append("tipo",v.tipo||"Documento enviado");await rhApi("/employee-files",{method:"POST",body});const j=await rhApi("/data");PORTAL_DATA_META={...PORTAL_DATA_META,...j};DB=j.data;rawSnapshot=JSON.stringify(DB);normalizeDB();toast("✅ Documento enviado ao RH");return true;}catch(e){toast("❌ "+(e.message||"Não foi possível enviar"));return false;}finally{busy(false);}});
 A.abrirAnexoFerias = async (rid,aid)=>{const r=(DB.ferias||[]).find(x=>x.id===rid),p=r?.opcoesFuncionario?.find(x=>x.anexos?.some(a=>a.id===aid)),a=p?.anexos?.find(x=>x.id===aid);if(!r||!a?.arquivo)return;if(a.storage==="supabase"){busy(true);try{const result=await rhApi("/vacation-files?path="+encodeURIComponent(a.arquivo));window.open(result.url,"_blank","noopener");}catch(e){toast("❌ "+(e.message||"Arquivo não encontrado"));}finally{busy(false);}return;}await A.abrirArq(r.funcionarioId,a.arquivo);};
 A.excluirAnexoFerias = (ev,rid,aid)=>{
   ev?.preventDefault();ev?.stopPropagation();
@@ -1369,6 +1406,8 @@ const fDados = f => [
   {k:"dataAdmissao", label:"Data de admissão", type:"date"},
   {k:"dataDemissao", label:"Data de desligamento", type:"date"},
   {k:"linkedin", label:"LinkedIn", full:1, ph:"https://linkedin.com/in/…"},
+  {k:"perfilRh", label:"Acesso do funcionário", type:"select", opts:[["OPERACIONAL","Sem acesso individual"],["FUNCIONARIO","Funcionário — vê somente os próprios dados"]], full:1},
+  {k:"loginEmail", label:"E-mail exato para entrar no RH", type:"email", full:1, ph:"nome@livionsolutions.com.br"},
 ];
 const fCadastro = ()=>[
   {k:"nome", label:"Nome completo", req:1, full:1},
@@ -1382,11 +1421,15 @@ const fCadastro = ()=>[
   {k:"dataAdmissao", label:"Data de admissão", type:"date"},
   {k:"dataDemissao", label:"Data de desligamento", type:"date"},
   {k:"linkedin", label:"LinkedIn", full:1, ph:"https://linkedin.com/in/…"},
+  {k:"perfilRh", label:"Acesso do funcionário", type:"select", opts:[["OPERACIONAL","Sem acesso individual"],["FUNCIONARIO","Funcionário — vê somente os próprios dados"]], full:1},
+  {k:"loginEmail", label:"E-mail exato para entrar no RH", type:"email", full:1, ph:"nome@livionsolutions.com.br"},
 ];
-A.novoFunc = ()=> openForm("Novo funcionário ou candidato", fCadastro(), {status:"Ativo"}, async v=>{
+A.novoFunc = ()=> openForm("Novo funcionário ou candidato", fCadastro(), {status:"Ativo",perfilRh:"OPERACIONAL"}, async v=>{
+  if(v.perfilRh==="FUNCIONARIO"&&!/^\S+@\S+\.\S+$/.test(String(v.loginEmail||""))){toast("Informe o e-mail exato que o funcionário usa no Portal.");return false;}
   const id = nextFunId();
   const f = { id, nome:v.nome, pasta:`${id} - ${safeName(v.nome)}`, foto:null, curriculo:null,
     status:v.status, empresa:v.empresa, cargo:v.cargo, nivel:v.nivel, linkedin:v.linkedin,
+    perfilRh:v.perfilRh||"OPERACIONAL",loginEmail:v.perfilRh==="FUNCIONARIO"?String(v.loginEmail||"").trim().toLowerCase():null,
     dataAdmissao:v.dataAdmissao, dataDemissao:v.dataDemissao, avaliacao:null, obsAvaliacao:null, motivosObs:null, observacoes:null,
     pessoal:{telefonePessoal:v.telefone||null,emailPessoal:v.email||null,dependentes:[],emergencias:[],saude:{doencas:[],medicamentos:[],alergias:[]}}, bancos:[], documentos:[], projetos:[] };
   try{
@@ -1399,7 +1442,7 @@ A.novoFunc = ()=> openForm("Novo funcionário ou candidato", fCadastro(), {statu
     DB.funcionarios=DB.funcionarios.filter(x=>x.id!==id);return false;
   }catch(e){toast("❌ Não foi possível cadastrar: "+(e.message||"erro"));return false;}finally{busy(false);}
 });
-A.editDados = id=>{ const f=getF(id); if(!f){toast("Funcionário não encontrado. Recarregue os dados.");return;} if(!f.pessoal)f.pessoal={};if(!Array.isArray(f.bancos))f.bancos=[];if(!Array.isArray(f.documentos))f.documentos=[];if(!Array.isArray(f.projetos))f.projetos=[]; openForm("Editar dados", fDados(f), f, async v=>{ Object.assign(f, v); if(await saveDB()) toast("✅ Salvo"); }); };
+A.editDados = id=>{ const f=getF(id); if(!f){toast("Funcionário não encontrado. Recarregue os dados.");return;} if(!f.pessoal)f.pessoal={};if(!Array.isArray(f.bancos))f.bancos=[];if(!Array.isArray(f.documentos))f.documentos=[];if(!Array.isArray(f.projetos))f.projetos=[]; openForm("Editar dados", fDados(f), f, async v=>{if(v.perfilRh==="FUNCIONARIO"&&!/^\S+@\S+\.\S+$/.test(String(v.loginEmail||""))){toast("Informe o e-mail exato que o funcionário usa no Portal.");return false;}v.loginEmail=v.perfilRh==="FUNCIONARIO"?String(v.loginEmail||"").trim().toLowerCase():null;Object.assign(f, v); if(await saveDB()) toast("✅ Salvo"); }); };
 A.editNotas = id=>{ const f=getF(id); openForm("Anotações e avaliação", [
     {k:"avaliacao", label:"Avaliação", type:"textarea"},
     {k:"obsAvaliacao", label:"Observação da avaliação", type:"textarea"},
@@ -1452,7 +1495,7 @@ A.editBanco = (id,i)=>{ const f=getF(id); const b = i>=0?f.bancos[i]:{};
 A.delBanco = (id,i)=> confirmar("Excluir esta conta bancária?", async ()=>{ getF(id).bancos.splice(i,1); await saveDB(); });
 
 /* --- documentos --- */
-const TIPOS_DOC = ["RG","CPF","Carteira de Trabalho","Comprovante de Endereço","Atestado de Saúde Ocupacional","Contrato de Trabalho","Contrato de Prestação de Serviços","Certificado / Curso","Exame","Atestado","Outro"];
+const TIPOS_DOC = ["RG","CPF","Carteira de Trabalho","Comprovante de Endereço","Atestado de Saúde Ocupacional","Contrato de Trabalho","Contrato de Prestação de Serviços","Holerite","Certificado / Curso","Exame","Atestado","Outro"];
 A.editDoc = (id,i)=>{ const f=getF(id); const d = i>=0?f.documentos[i]:{};
   openForm(i>=0?"Editar documento":"Novo documento", [
     {k:"tipo", label:"Tipo de documento", type:"select", opts:TIPOS_DOC.map(t=>[t,t]).concat(d.tipo&&!TIPOS_DOC.includes(d.tipo)?[[d.tipo,d.tipo]]:[]), full:1},
@@ -1463,20 +1506,19 @@ A.editDoc = (id,i)=>{ const f=getF(id); const d = i>=0?f.documentos[i]:{};
   ], d, async v=>{
     busy(true);
     try{
-      let arquivo = d.arquivo||null;
+      let arquivo = d.arquivo||null,nome=d.nome||null,storage=d.storage||null;
       if(v._file){
-        const ext = v._file.name.split(".").pop();
-        const fn = `${new Date().toISOString().slice(0,10)}_${safeName(v.tipo||"doc").replace(/\s+/g,"_")}_${uid().slice(0,4)}.${ext}`;
-        await uploadFile(`Funcionarios/${f.pasta}/Documentos/${fn}`, v._file, v._file.type);
-        arquivo = "Documentos/"+fn;
+        if(v._file.size>10*1024*1024)throw new Error("O arquivo deve ter no máximo 10 MB");
+        const category=v.tipo==="Holerite"?"holerites":"documentos",uploaded=await uploadStaffFile(v._file,f.id,category);
+        arquivo = "supabase:"+uploaded.arquivo;nome=uploaded.nome||v._file.name;storage="supabase";
       }
-      const rec = {id:d.id||uid(), tipo:v.tipo, emissao:v.emissao, validade:v.validade, arquivo, observacoes:v.observacoes};
+      const rec = {id:d.id||uid(), tipo:v.tipo, categoria:v.tipo, nome, emissao:v.emissao, validade:v.validade, competencia:v.tipo==="Holerite"&&v.emissao?String(v.emissao).slice(0,7):d.competencia||null, arquivo, storage, status:arquivo?"Disponível":null, observacoes:v.observacoes,adicionadoEm:d.adicionadoEm||new Date().toISOString()};
       if(i>=0) f.documentos[i]=rec; else f.documentos.push(rec);
       if(await saveDB()) toast("✅ Documento salvo");
     }catch(e){ toast("❌ "+e.message); busy(false); return false; }
     busy(false);
   }); };
-A.delDoc = (id,i)=> confirmar("Excluir este documento da lista? (o arquivo permanece na pasta do OneDrive)", async ()=>{ getF(id).documentos.splice(i,1); await saveDB(); });
+A.delDoc = (id,i)=>{const f=getF(id),d=f?.documentos?.[i];if(!d)return;confirmar("Excluir este documento da lista? Arquivos privados centrais também serão removidos.",async()=>{f.documentos.splice(i,1);if(!await saveDB()){f.documentos.splice(i,0,d);return;}const p=employeeFilePath(d.arquivo);if(d.storage==="supabase"&&employeeCentralFile(p))try{await rhApi("/staff-files?path="+encodeURIComponent(p),{method:"DELETE"});}catch(e){toast("Documento removido da lista; o arquivo exigirá limpeza pelo suporte.");return;}toast("✅ Documento excluído");});};
 A.upCurriculo = id=>{
   const f=getF(id); const inp=document.getElementById("fileGen");
   inp.accept=".pdf,.doc,.docx,image/*"; inp.value="";
