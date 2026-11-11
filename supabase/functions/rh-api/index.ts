@@ -51,7 +51,7 @@ Deno.serve(async(req)=>{
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors(origin)});
   try{
     const url=new URL(req.url),base='/rh-api',i=url.pathname.indexOf(base),path=i>=0?url.pathname.slice(i+base.length)||'/':'/';
-    if(path==='/health'&&req.method==='GET')return reply(origin,200,{ok:true,service:'rh-api',version:20});
+    if(path==='/health'&&req.method==='GET')return reply(origin,200,{ok:true,service:'rh-api',version:21});
     const ctx=await rhAccess(req);
     if(ctx.userType!=='INTERNO')throw new Error('FORBIDDEN');
 
@@ -80,6 +80,30 @@ Deno.serve(async(req)=>{
       if(!(file instanceof File))return reply(origin,400,{error:'Arquivo inválido'});const {ext,mime,baseName}=fileMeta(file);const objectPath=category==='curriculos'?`curriculos/${employeeId}/${crypto.randomUUID()}_${baseName}.${ext}`:`funcionarios/${employeeId}/${category}/${crypto.randomUUID()}_${baseName}.${ext}`;
       const up=await db.storage.from(STAFF_BUCKET).upload(objectPath,file,{contentType:mime,upsert:false,cacheControl:'3600'});if(up.error)throw up.error;await audit(ctx.me.email,'RH_STAFF_FILE_UPLOAD',objectPath,{employeeId,category,size:file.size,mime});
       return reply(origin,201,{ok:true,file:{nome:file.name,arquivo:objectPath,storage:'supabase',tipo:mime,tamanho:file.size,adicionadoEm:new Date().toISOString()}});
+    }
+
+
+    if(path==='/payslip-upload-plan'&&req.method==='POST'){
+      if(!ctx.admin)throw new Error('FORBIDDEN');
+      const body=await req.json(),files=body?.files;if(!Array.isArray(files)||files.length<1||files.length>100)return reply(origin,400,{error:'Informe de 1 a 100 arquivos.'});
+      const current=await row(),norm=(v:string)=>String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase(),seen=new Set<string>();
+      const checked=[];
+      for(const item of files){
+        const employeeId=String(item.employeeId||''),matches=(current.payload.funcionarios||[]).filter((f:any)=>String(f.id)===employeeId),nome=String(item.nome||''),titulo=String(item.titulo||'').trim(),sha256=String(item.sha256||'');
+        if(matches.length!==1||norm(matches[0].nome)!==norm(item.employeeName||'')||!norm(nome).replace(/\.PDF$/,'').endsWith(' - '+norm(matches[0].nome)))throw new Error('FUNCIONARIO_INVALIDO');
+        if(!/\.pdf$/i.test(nome)||!titulo||titulo.length>160||!Number.isSafeInteger(item.size)||item.size<1||item.size>MAX_FILE_SIZE||!/^[a-f0-9]{64}$/.test(sha256)||seen.has(employeeId+sha256))return reply(origin,400,{error:'Arquivo, tamanho, checksum ou nome de exibição inválido.'});
+        seen.add(employeeId+sha256);const existing=(matches[0].documentos||[]).find((d:any)=>d.sourceSha256===sha256);
+        checked.push({employeeId,employeeName:matches[0].nome,nome,titulo,size:item.size,sha256,existing:existing||null});
+      }
+      const entries=[];
+      for(const item of checked){
+        if(item.existing){entries.push({...item,skipped:true});continue;}
+        const objectPath='funcionarios/'+safePart(item.employeeId,'funcionario')+'/holerites/'+item.sha256+'.pdf';
+        const signed=await db.storage.from(STAFF_BUCKET).createSignedUploadUrl(objectPath,{upsert:false});if(signed.error)throw signed.error;
+        entries.push({...item,objectPath,signedUrl:signed.data.signedUrl,skipped:false});
+      }
+      const batchId=crypto.randomUUID();await audit(ctx.me.email,'RH_PAYSLIP_BATCH_PLAN',batchId,{count:entries.length});
+      return reply(origin,200,{ok:true,batchId,actor:ctx.me.email,bucket:STAFF_BUCKET,expiresAt:new Date(Date.now()+2*60*60*1000).toISOString(),entries});
     }
 
     if(path==='/payslip-files'&&req.method==='POST'){
