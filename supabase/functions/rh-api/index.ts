@@ -36,7 +36,7 @@ function isEmployeeAccess(f:any){return String(f?.perfilRh||'').toUpperCase()===
 function linkedEmployee(payload:any,ctx:any,required=true){const matches=(payload?.funcionarios||[]).filter((f:any)=>isEmployeeAccess(f)&&email(f.loginEmail)===ctx.me.email);if(matches.length>1)throw new Error('VINCULO_DUPLICADO');if(matches.length===1)return matches[0];if(!required)return null;throw new Error('FUNCIONARIO_NAO_VINCULADO');}
 function isPayslip(d:any){return /holerite|contracheque|recibo de pagamento/i.test(String(d?.categoria||d?.tipo||d?.titulo||''));}
 function employeePayload(payload:any,f:any){
-  const docs=(Array.isArray(f.documentos)?f.documentos:[]).map((d:any)=>({id:d.id||null,tipo:d.tipo||d.categoria||'Documento',categoria:d.categoria||d.tipo||'Outros',nome:d.nome||null,emissao:d.emissao||null,validade:d.validade||null,competencia:d.competencia||null,status:d.status||'Disponível',observacoes:d.observacoes||null,arquivo:d.arquivo||null,storage:d.storage||null,adicionadoEm:d.adicionadoEm||null,origem:d.origem||'RH'}));
+  const docs=(Array.isArray(f.documentos)?f.documentos:[]).map((d:any)=>({id:d.id||null,tipo:d.tipo||d.categoria||'Documento',categoria:d.categoria||d.tipo||'Outros',titulo:d.titulo||null,nome:d.nome||null,emissao:d.emissao||null,validade:d.validade||null,competencia:d.competencia||null,status:d.status||'Disponível',observacoes:d.observacoes||null,arquivo:d.arquivo||null,storage:d.storage||null,adicionadoEm:d.adicionadoEm||null,origem:d.origem||'RH'}));
   const holerites=[...docs.filter(isPayslip),...(Array.isArray(payload.holerites)?payload.holerites.filter((h:any)=>String(h.funcionarioId)===String(f.id)):[])];
   const own={id:f.id,nome:f.nome,status:f.status,empresa:f.empresa,cargo:f.cargo,nivel:f.nivel,departamento:f.departamento||null,tipoVinculo:f.tipoVinculo||null,dataAdmissao:f.dataAdmissao||null,dataDemissao:f.dataDemissao||null,linkedin:f.linkedin||null,foto:f.foto||null,curriculo:f.curriculo||null,pessoal:structuredClone(f.pessoal||{}),documentos:docs,projetos:structuredClone(f.projetos||[])};
   return {meta:{...(payload.meta||{}),employeePortal:true},funcionarios:[own],ferias:(payload.ferias||[]).filter((r:any)=>String(r.funcionarioId)===String(f.id)),holerites,projetos:[],clientes:[],cargos:[],regrasSalario:[],empresas:[]};
@@ -51,7 +51,7 @@ Deno.serve(async(req)=>{
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors(origin)});
   try{
     const url=new URL(req.url),base='/rh-api',i=url.pathname.indexOf(base),path=i>=0?url.pathname.slice(i+base.length)||'/':'/';
-    if(path==='/health'&&req.method==='GET')return reply(origin,200,{ok:true,service:'rh-api',version:19});
+    if(path==='/health'&&req.method==='GET')return reply(origin,200,{ok:true,service:'rh-api',version:20});
     const ctx=await rhAccess(req);
     if(ctx.userType!=='INTERNO')throw new Error('FORBIDDEN');
 
@@ -81,10 +81,36 @@ Deno.serve(async(req)=>{
       const up=await db.storage.from(STAFF_BUCKET).upload(objectPath,file,{contentType:mime,upsert:false,cacheControl:'3600'});if(up.error)throw up.error;await audit(ctx.me.email,'RH_STAFF_FILE_UPLOAD',objectPath,{employeeId,category,size:file.size,mime});
       return reply(origin,201,{ok:true,file:{nome:file.name,arquivo:objectPath,storage:'supabase',tipo:mime,tamanho:file.size,adicionadoEm:new Date().toISOString()}});
     }
+
+    if(path==='/payslip-files'&&req.method==='POST'){
+      const first=await row();if((!ctx.admin&&linkedEmployee(first.payload,ctx,false))||!canWriteDocuments(ctx))throw new Error('FORBIDDEN');
+      const form=await req.formData(),file=form.get('file'),employeeId=String(form.get('employeeId')||''),expectedName=String(form.get('employeeName')||''),titulo=String(form.get('titulo')||'').trim(),observacoes=String(form.get('observacoes')||'').trim();
+      if(!(file instanceof File)||!titulo||titulo.length>160||observacoes.length>4000)return reply(origin,400,{error:'Informe arquivo e nome de exibição de até 160 caracteres.'});
+      const {ext}=fileMeta(file);if(ext!=='pdf')return reply(origin,400,{error:'A importação de holerites aceita somente PDF.'});
+      const norm=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+      const targetFor=(current:any)=>{const matches=(current.payload.funcionarios||[]).filter((f:any)=>String(f.id)===employeeId);if(matches.length!==1)throw new Error('FUNCIONARIO_INVALIDO');const f=matches[0];if(!expectedName||norm(f.nome)!==norm(expectedName)||!norm(file.name.replace(/\.pdf$/i,'')).endsWith(' - '+norm(f.nome)))throw new Error('FUNCIONARIO_INVALIDO');return f;};
+      const f=targetFor(first),bytes=await file.arrayBuffer();if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')return reply(origin,400,{error:'O arquivo não é um PDF válido.'});
+      const sourceSha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(v=>v.toString(16).padStart(2,'0')).join('');
+      const duplicate=(employee:any)=>(employee.documentos||[]).find((d:any)=>d.sourceSha256===sourceSha256);
+      const existing=duplicate(f);if(existing)return reply(origin,200,{ok:true,skipped:true,file:existing,employeeId,revision:first.revision});
+      const objectPath='funcionarios/'+safePart(employeeId,'funcionario')+'/holerites/'+crypto.randomUUID()+'.pdf',up=await db.storage.from(STAFF_BUCKET).upload(objectPath,file,{contentType:'application/pdf',upsert:false,cacheControl:'3600'});if(up.error)throw up.error;
+      const rec={id:crypto.randomUUID(),tipo:'Holerite',categoria:'Holerite',titulo,nome:file.name,competencia:/^\d{4}-(0[1-9]|1[0-2])(?:\s|$)/.test(titulo)?titulo.slice(0,7):null,observacoes:observacoes||null,arquivo:'supabase:'+objectPath,storage:'supabase',status:'Disponível',origem:'RH',tamanho:file.size,sourceSha256,adicionadoEm:new Date().toISOString()};
+      let committed=false;
+      try{
+        for(let attempt=0;attempt<4;attempt++){
+          const current=attempt===0?first:await row();if(!ctx.admin&&linkedEmployee(current.payload,ctx,false))throw new Error('FORBIDDEN');const target=targetFor(current),found=duplicate(target);if(found)return reply(origin,200,{ok:true,skipped:true,file:found,employeeId,revision:current.revision});
+          const payload=structuredClone(current.payload),dest=(payload.funcionarios||[]).find((x:any)=>String(x.id)===employeeId);dest.documentos=Array.isArray(dest.documentos)?dest.documentos:[];dest.documentos.push(rec);
+          const saved=await db.from('portal_rh_data').update({payload,revision:current.revision+1,updated_at:new Date().toISOString(),updated_by:ctx.me.email}).eq('id',1).eq('revision',current.revision).select('revision').maybeSingle();if(saved.error)throw saved.error;if(!saved.data)continue;
+          committed=true;await audit(ctx.me.email,'RH_PAYSLIP_IMPORT',objectPath,{employeeId,sourceSha256});return reply(origin,201,{ok:true,skipped:false,file:rec,employeeId,revision:current.revision+1});
+        }
+        return reply(origin,409,{error:'A base foi alterada durante a importação. Repita a seleção; arquivos já cadastrados serão ignorados.'});
+      }finally{if(!committed)await db.storage.from(STAFF_BUCKET).remove([objectPath]);}
+    }
+
     if(path==='/employee-files'&&req.method==='POST'){
       const current=await row(),f=linkedEmployee(current.payload,ctx),form=await req.formData(),file=form.get('file');if(!(file instanceof File))return reply(origin,400,{error:'Arquivo inválido'});const {ext,mime,baseName}=fileMeta(file),tipo=String(form.get('tipo')||'Documento enviado').trim().slice(0,80)||'Documento enviado';
       const objectPath=`funcionarios/${safePart(String(f.id),'funcionario')}/enviados/${crypto.randomUUID()}_${baseName}.${ext}`,uploaded=await db.storage.from(STAFF_BUCKET).upload(objectPath,file,{contentType:mime,upsert:false,cacheControl:'3600'});if(uploaded.error)throw uploaded.error;
-      const rec={id:crypto.randomUUID(),tipo,categoria:tipo,nome:file.name,arquivo:'supabase:'+objectPath,storage:'supabase',status:'Enviado',origem:'FUNCIONARIO',somenteAdicionar:true,tamanho:file.size,adicionadoEm:new Date().toISOString()};
+      const rec={id:crypto.randomUUID(),tipo,categoria:tipo,titulo:String(form.get('titulo')||'').trim().slice(0,160)||null,observacoes:String(form.get('observacoes')||'').trim().slice(0,4000)||null,nome:file.name,arquivo:'supabase:'+objectPath,storage:'supabase',status:'Enviado',origem:'FUNCIONARIO',somenteAdicionar:true,tamanho:file.size,adicionadoEm:new Date().toISOString()};
       const payload=structuredClone(current.payload),target=(payload.funcionarios||[]).find((x:any)=>String(x.id)===String(f.id));target.documentos=Array.isArray(target.documentos)?target.documentos:[];target.documentos.push(rec);const next=current.revision+1;
       const saved=await db.from('portal_rh_data').update({payload,revision:next,updated_at:new Date().toISOString(),updated_by:ctx.me.email}).eq('id',1).eq('revision',current.revision).select('revision').maybeSingle();
       if(saved.error||!saved.data){await db.storage.from(STAFF_BUCKET).remove([objectPath]);if(saved.error)throw saved.error;return reply(origin,409,{error:'A base foi alterada. Recarregue e tente novamente.'});}
@@ -120,5 +146,5 @@ Deno.serve(async(req)=>{
       if(!ctx.admin)throw new Error('FORBIDDEN');const body=await req.json();if(!body?.data||typeof body.data!=='object'||Array.isArray(body.data)||Object.keys(body.data).length===0)return reply(origin,400,{error:'Dados inválidos'});if(body.force)return reply(origin,409,{error:'Substituição forçada não permitida'});const current=await row();if(current.payload&&Object.keys(current.payload).length>0)return reply(origin,409,{error:'Base RH já inicializada'});const next=(current.revision||0)+1,values={payload:body.data,revision:next,updated_at:new Date().toISOString(),updated_by:ctx.me.email};let saved;if(current.id)saved=await db.from('portal_rh_data').update(values).eq('id',1).eq('revision',current.revision).eq('payload','{}').select('revision').maybeSingle();else saved=await db.from('portal_rh_data').insert({id:1,...values}).select('revision').maybeSingle();if(saved.error?.code==='23505'||(!saved.error&&!saved.data))return reply(origin,409,{error:'Base RH já inicializada'});if(saved.error)throw saved.error;await audit(ctx.me.email,'RH_DATA_BOOTSTRAP','RH',{revision:next});return reply(origin,200,{ok:true,revision:next});
     }
     return reply(origin,404,{error:'NOT_FOUND'});
-  }catch(e){const m=e instanceof Error?e.message:'ERROR';const status=e instanceof SyntaxError?400:m==='UNAUTHENTICATED'?401:['FORBIDDEN','FUNCIONARIO_NAO_VINCULADO'].includes(m)?403:m==='VINCULO_DUPLICADO'?409:['ARQUIVO_INVALIDO','FORMATO_INVALIDO'].includes(m)?400:500;const friendly=m==='FUNCIONARIO_NAO_VINCULADO'?'Seu acesso individual ao RH ainda não foi vinculado pelo administrador.':m==='ARQUIVO_INVALIDO'?'Arquivo inválido ou maior que 10 MB.':m==='FORMATO_INVALIDO'?'Formato não permitido. Use PDF, imagem, DOC ou DOCX.':m;return reply(origin,status,{error:friendly});}
+  }catch(e){const m=e instanceof Error?e.message:'ERROR';const status=e instanceof SyntaxError?400:m==='UNAUTHENTICATED'?401:['FORBIDDEN','FUNCIONARIO_NAO_VINCULADO'].includes(m)?403:m==='VINCULO_DUPLICADO'?409:m==='FUNCIONARIO_INVALIDO'?400:['ARQUIVO_INVALIDO','FORMATO_INVALIDO'].includes(m)?400:500;const friendly=m==='FUNCIONARIO_INVALIDO'?'O arquivo e o cadastro devem corresponder ao mesmo funcionário.':m==='FUNCIONARIO_NAO_VINCULADO'?'Seu acesso individual ao RH ainda não foi vinculado pelo administrador.':m==='ARQUIVO_INVALIDO'?'Arquivo inválido ou maior que 10 MB.':m==='FORMATO_INVALIDO'?'Formato não permitido. Use PDF, imagem, DOC ou DOCX.':m;return reply(origin,status,{error:friendly});}
 });
