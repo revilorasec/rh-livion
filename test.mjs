@@ -75,7 +75,7 @@ test('administrador continua recebendo a base completa',async()=>{const f=fixtur
 test('backend rejeita e-mail individual duplicado',async()=>{const payload=structuredClone(basePayload);payload.funcionarios[1].perfilRh='FUNCIONARIO';payload.funcionarios[1].loginEmail='ana@example.invalid';const f=fixture({admin:true}),r=await f.call('/data',{method:'PUT',body:{data:payload,revision:7}});assert.equal(r.status,409);assert.equal(f.state.writes,0);});
 
 test('interface individual e configuração administrativa estão presentes e o JavaScript é válido',()=>{
-  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');for(const marker of ['const APP_VER = "1.20.1"','Área individual: você está vendo somente seus próprios dados.','employee-home','employee-data','employee-vacations','employee-documents','employee-payslips','Funcionário — vê somente os próprios dados','E-mail exato para entrar no RH','Holerite','/employee-files'])assert.ok(html.includes(marker),marker);for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))if(match[1].trim())new vm.Script(match[1]);
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');for(const marker of ['const APP_VER = "1.20.2"','Área individual: você está vendo somente seus próprios dados.','employee-home','employee-data','employee-vacations','employee-documents','employee-payslips','Funcionário — vê somente os próprios dados','E-mail exato para entrar no RH','Holerite','/employee-files'])assert.ok(html.includes(marker),marker);for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))if(match[1].trim())new vm.Script(match[1]);
 });
 
 
@@ -83,7 +83,7 @@ function payslipUI({doc=null,save=true}={}){
   const html=readFileSync(new URL('./index.html',import.meta.url),'utf8'),f={id:'F1',nome:'Ana Silva',documentos:doc?[structuredClone(doc)]:[]};
   const state={f,uploads:[],messages:[],saves:0},controls={};for(const key of ['tipo','emissao','validade']){const row={hidden:false};controls[key]={value:key==='tipo'?(doc?.tipo||'RG'):'',closest:()=>row,addEventListener(_event,fn){this.change=fn;}};}
   const ctx={A:{},DB:{funcionarios:[f],holerites:[]},getF:()=>f,uid:()=> 'NEW',busy:()=>{},toast:m=>state.messages.push(m),saveDB:async()=>{state.saves++;return save;},uploadStaffFile:async(file,id,category)=>{state.uploads.push({file,id,category});return {arquivo:'funcionarios/F1/holerites/new.pdf',nome:file.name};},openForm(_title,fields,values,onSave){Object.assign(state,{fields,values,onSave});return {querySelector:selector=>controls[selector.slice(4)]};},esc:s=>String(s??'').replaceAll('<','&lt;'),fmtDate:v=>v,employeeFileActions:()=>'<button>Abrir</button><button>Baixar</button>',employeeScope:()=>''};
-  vm.createContext(ctx);for(const name of ['employeePayslip','payslipMonth','payslipTitle','documentTitle','documentFilename','employeePayslips','employeeDocRow','vEmployeePayslips'])vm.runInContext(html.split(/\r?\n/).find(line=>line.startsWith('function '+name+'(')),ctx);
+  vm.createContext(ctx);for(const name of ['employeePayslip','payslipMonth','payslipTitle','documentTitle','documentFilename','documentDate','documentGroups','groupedDocuments','employeePayslips','employeeDocRow','vEmployeePayslips'])vm.runInContext(html.split(/\r?\n/).find(line=>line.startsWith('function '+name+'(')),ctx);
   const start=html.indexOf('const TIPOS_DOC ='),end=html.indexOf('A.delDoc',start);vm.runInContext(html.slice(start,end),ctx);ctx.A.editDoc('F1',doc?0:-1);return {ctx,state,controls};
 }
 
@@ -130,4 +130,14 @@ test('plano externo exige administrador e valida o lote inteiro antes de assinar
   assert.equal((await fixture().call('/payslip-upload-plan',{method:'POST',body})).status,403);
   const f=fixture({admin:true}),r=await f.call('/payslip-upload-plan',{method:'POST',body});assert.equal(r.status,200);const b=await r.json();assert.equal(b.entries.length,1);assert.equal(b.entries[0].objectPath,'funcionarios/F1/holerites/'+('a'.repeat(64))+'.pdf');assert.equal(f.state.writes,0);
   const bad=fixture({admin:true});body.files.push({...body.files[0],employeeName:'Outra Pessoa'});assert.equal((await bad.call('/payslip-upload-plan',{method:'POST',body})).status,400);assert.equal(bad.state.signed.length,0);
+});
+
+
+test('grupos recolhidos ordenam por referência e preservam índices de edição',()=>{
+ const {ctx}=payslipUI();
+ const docs=[{tipo:'RG',emissao:'2020-01-01'},{tipo:'Holerite',titulo:'2025-09 - Holerite',adicionadoEm:'2026-11-11'},{tipo:'Holerite',titulo:'2026-10 - Holerite',adicionadoEm:'2026-11-11'},{tipo:'Holerite',titulo:'2025-12 - 13o salario - integral'},{tipo:'RG',emissao:'2025-02-01'},{tipo:'Holerite',titulo:'Sem referência'}];
+ const original=JSON.stringify(docs),groups=ctx.documentGroups(docs);
+ assert.equal(groups[0].type,'Holerites');assert.deepEqual(Array.from(groups[0].items,x=>x.i),[2,3,1,5]);assert.deepEqual(Array.from(groups[1].items,x=>x.i),[4,0]);assert.equal(JSON.stringify(docs),original);
+ const rendered=ctx.groupedDocuments(docs,(d,i)=>'<button data-edit="'+i+'">'+ctx.documentTitle(d)+'</button>');
+ assert.match(rendered,/<details class="document-group"><summary>/);assert.ok(!rendered.includes('<details class="document-group" open'));assert.ok(rendered.indexOf('2026-10 - Holerite')<rendered.indexOf('2025-09 - Holerite'));assert.match(rendered,/data-edit="2">2026-10 - Holerite/);
 });
