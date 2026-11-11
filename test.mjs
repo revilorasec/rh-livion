@@ -72,5 +72,43 @@ test('administrador continua recebendo a base completa',async()=>{const f=fixtur
 test('backend rejeita e-mail individual duplicado',async()=>{const payload=structuredClone(basePayload);payload.funcionarios[1].perfilRh='FUNCIONARIO';payload.funcionarios[1].loginEmail='ana@example.invalid';const f=fixture({admin:true}),r=await f.call('/data',{method:'PUT',body:{data:payload,revision:7}});assert.equal(r.status,409);assert.equal(f.state.writes,0);});
 
 test('interface individual e configuração administrativa estão presentes e o JavaScript é válido',()=>{
-  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');for(const marker of ['const APP_VER = "1.19.0"','Área individual: você está vendo somente seus próprios dados.','employee-home','employee-data','employee-vacations','employee-documents','employee-payslips','Funcionário — vê somente os próprios dados','E-mail exato para entrar no RH','Holerite','/employee-files'])assert.ok(html.includes(marker),marker);for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))if(match[1].trim())new vm.Script(match[1]);
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');for(const marker of ['const APP_VER = "1.19.1"','Área individual: você está vendo somente seus próprios dados.','employee-home','employee-data','employee-vacations','employee-documents','employee-payslips','Funcionário — vê somente os próprios dados','E-mail exato para entrar no RH','Holerite','/employee-files'])assert.ok(html.includes(marker),marker);for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))if(match[1].trim())new vm.Script(match[1]);
+});
+
+function payslipUI({doc=null,save=true}={}){
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
+  const f={id:'F1',documentos:doc?[structuredClone(doc)]:[]};
+  const state={f,uploads:[],messages:[],saves:0,fields:null,values:null,onSave:null};
+  const controls={};for(const key of ['tipo','competencia','emissao','validade']){const row={hidden:false};controls[key]={value:key==='tipo'?(doc?.tipo||'RG'):'',closest:()=>row,addEventListener(_event,fn){this.change=fn;}};}
+  const ctx={A:{},DB:{funcionarios:[f],holerites:[]},getF:()=>f,uid:()=> 'NEW',busy:()=>{},toast:m=>state.messages.push(m),saveDB:async()=>{state.saves++;return save;},uploadStaffFile:async(file,id,category)=>{state.uploads.push({file,id,category});return {arquivo:'funcionarios/F1/holerites/new.pdf',nome:file.name};},openForm(_title,fields,values,onSave){Object.assign(state,{fields,values,onSave});return {querySelector:selector=>controls[selector.slice(4)]};},esc:s=>String(s??'').replaceAll('<','&lt;'),fmtDate:v=>v,employeeFileActions:()=>'',employeeScope:()=>''};
+  vm.createContext(ctx);
+  for(const name of ['employeePayslip','payslipMonth','payslipTitle','employeePayslips','employeeDocRow','vEmployeePayslips'])vm.runInContext(html.split(/\r?\n/).find(line=>line.startsWith('function '+name+'(')),ctx);
+  const start=html.indexOf('const TIPOS_DOC ='),end=html.indexOf('A.delDoc',start);vm.runInContext(html.slice(start,end),ctx);
+  ctx.A.editDoc('F1',doc?0:-1);return {ctx,state,controls};
+}
+
+test('holerite exige referência válida e arquivo; grava mês sem depender da emissão',async()=>{
+  const {state,controls}=payslipUI();controls.tipo.value='Holerite';controls.tipo.change();
+  assert.equal(controls.competencia.closest().hidden,false);assert.equal(controls.emissao.closest().hidden,true);assert.equal(controls.validade.closest().hidden,true);
+  const v={tipo:'Holerite',competencia:'2026-13',observacoes:'Referente a outubro'};
+  assert.equal(await state.onSave(v),false);assert.equal(state.uploads.length,0);
+  v.competencia='2026-10';assert.equal(await state.onSave(v),false);assert.equal(state.saves,0);
+  v._file={name:'arquivo.pdf',size:100};await state.onSave(v);
+  assert.equal(state.f.documentos[0].competencia,'2026-10');assert.equal(state.f.documentos[0].emissao,null);assert.equal(state.f.documentos[0].observacoes,v.observacoes);assert.equal(state.uploads[0].category,'holerites');
+});
+
+test('edição de referência mantém arquivo existente e falha ao salvar preserva o registro',async()=>{
+  const doc={id:'D1',tipo:'Holerite',competencia:'2026-11',arquivo:'supabase:old.pdf',emissao:'2026-12-05',observacoes:'Original'};
+  const {state}=payslipUI({doc});await state.onSave({tipo:'Holerite',competencia:'2026-10',observacoes:'Corrigido'});assert.equal(state.f.documentos[0].arquivo,doc.arquivo);assert.equal(state.uploads.length,0);assert.equal(state.f.documentos[0].emissao,doc.emissao);
+  const failed=payslipUI({doc,save:false});assert.equal(await failed.state.onSave({tipo:'Holerite',competencia:'2026-10'}),false);assert.equal(failed.state.f.documentos[0].competencia,'2026-11');
+});
+
+test('documentos comuns continuam com emissão e validade sem referência obrigatória',async()=>{
+  const {state,controls}=payslipUI();assert.equal(controls.competencia.closest().hidden,true);assert.equal(controls.emissao.closest().hidden,false);
+  await state.onSave({tipo:'RG',emissao:'2026-01-02',validade:'2030-01-02',observacoes:'RG'});assert.equal(state.f.documentos[0].emissao,'2026-01-02');assert.equal(state.f.documentos[0].validade,'2030-01-02');
+});
+
+test('lista destaca referência, ordena entre anos e não inventa mês para legado',()=>{
+  const {ctx,state}=payslipUI();state.f.documentos=[{id:'old',tipo:'Holerite',emissao:'2026-11-01'},{id:'oct',tipo:'Holerite',competencia:'2026-10',observacoes:'<Observação>'},{id:'jan',tipo:'Holerite',competencia:'2027-01'},{id:'nov',tipo:'Holerite',competencia:'2026-11'}];
+  const html=ctx.vEmployeePayslips();assert.ok(html.indexOf('Janeiro de 2027')<html.indexOf('Novembro de 2026'));assert.ok(html.indexOf('Novembro de 2026')<html.indexOf('Outubro de 2026'));assert.ok(html.indexOf('Outubro de 2026')<html.indexOf('Holerite — Referência não informada'));assert.ok(html.includes('&lt;Observação>'));assert.ok(!html.includes('Competência 2026-10'));
 });
