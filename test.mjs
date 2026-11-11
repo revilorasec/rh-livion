@@ -36,6 +36,7 @@ function fixture({email='ana@example.invalid',admin=false,actions=['*'],payload=
     storage:{from(){return {
       async upload(path,file){state.uploads.push({path,size:file.size});return {data:{path},error:null};},
       async remove(paths){state.removes.push(...paths);return {data:paths,error:null};},
+      async createSignedUploadUrl(path){state.signed.push({path});return {data:{signedUrl:"https://files.invalid/upload/"+path},error:null};},
       async createSignedUrl(path,_seconds,opt){state.signed.push({path,opt});return {data:{signedUrl:'https://files.invalid/'+encodeURIComponent(path)},error:null};},
     };}},
   };
@@ -74,7 +75,7 @@ test('administrador continua recebendo a base completa',async()=>{const f=fixtur
 test('backend rejeita e-mail individual duplicado',async()=>{const payload=structuredClone(basePayload);payload.funcionarios[1].perfilRh='FUNCIONARIO';payload.funcionarios[1].loginEmail='ana@example.invalid';const f=fixture({admin:true}),r=await f.call('/data',{method:'PUT',body:{data:payload,revision:7}});assert.equal(r.status,409);assert.equal(f.state.writes,0);});
 
 test('interface individual e configuração administrativa estão presentes e o JavaScript é válido',()=>{
-  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');for(const marker of ['const APP_VER = "1.20.0"','Área individual: você está vendo somente seus próprios dados.','employee-home','employee-data','employee-vacations','employee-documents','employee-payslips','Funcionário — vê somente os próprios dados','E-mail exato para entrar no RH','Holerite','/employee-files'])assert.ok(html.includes(marker),marker);for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))if(match[1].trim())new vm.Script(match[1]);
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');for(const marker of ['const APP_VER = "1.20.1"','Área individual: você está vendo somente seus próprios dados.','employee-home','employee-data','employee-vacations','employee-documents','employee-payslips','Funcionário — vê somente os próprios dados','E-mail exato para entrar no RH','Holerite','/employee-files'])assert.ok(html.includes(marker),marker);for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))if(match[1].trim())new vm.Script(match[1]);
 });
 
 
@@ -122,4 +123,11 @@ test('importação preserva gravação concorrente e remove apenas upload não r
 });
 test('envio individual preserva nome e observação no próprio cadastro',async()=>{
   const f=fixture(),body=new FormData();body.append('titulo','Meu comprovante');body.append('observacoes','Atualização cadastral');body.append('file',new File(['conteudo'],'comprovante.pdf',{type:'application/pdf'}));assert.equal((await f.call('/employee-files',{method:'POST',body})).status,201);const d=f.state.row.payload.funcionarios[0].documentos[1];assert.equal(d.titulo,'Meu comprovante');assert.equal(d.observacoes,'Atualização cadastral');const data=await (await f.call()).json();assert.equal(data.data.funcionarios[0].documentos[1].titulo,'Meu comprovante');
+});
+
+test('plano externo exige administrador e valida o lote inteiro antes de assinar',async()=>{
+  const body={files:[{employeeId:'F1',employeeName:'Ana Silva',nome:'2025-11 - Holerite - ANA SILVA.pdf',titulo:'2025-11 - Holerite',size:100,sha256:'a'.repeat(64)}]};
+  assert.equal((await fixture().call('/payslip-upload-plan',{method:'POST',body})).status,403);
+  const f=fixture({admin:true}),r=await f.call('/payslip-upload-plan',{method:'POST',body});assert.equal(r.status,200);const b=await r.json();assert.equal(b.entries.length,1);assert.equal(b.entries[0].objectPath,'funcionarios/F1/holerites/'+('a'.repeat(64))+'.pdf');assert.equal(f.state.writes,0);
+  const bad=fixture({admin:true});body.files.push({...body.files[0],employeeName:'Outra Pessoa'});assert.equal((await bad.call('/payslip-upload-plan',{method:'POST',body})).status,400);assert.equal(bad.state.signed.length,0);
 });
