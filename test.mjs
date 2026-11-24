@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
 const source=readFileSync(new URL('./supabase/functions/rh-api/index.ts',import.meta.url),'utf8');
-const code=stripTypeScriptTypes(source.replace(/^import .*\n/,''));
+const code=stripTypeScriptTypes(source.replace(/^import .*\n/gm,''));
 const tenant='911e1aee-070e-421b-ae71-439f01c2263e',client='88cf5cba-9f67-467d-8a51-9638200bed52';
 const token='x.'+Buffer.from(JSON.stringify({tid:tenant,azp:client})).toString('base64url')+'.x';
 const basePayload={
@@ -40,7 +40,7 @@ function fixture({email='ana@example.invalid',admin=false,actions=['*'],payload=
       async createSignedUrl(path,_seconds,opt){state.signed.push({path,opt});return {data:{signedUrl:'https://files.invalid/'+encodeURIComponent(path)},error:null};},
     };}},
   };
-  vm.runInNewContext(code,{createClient:()=>db,Deno:{env:{get:()=>''},serve:fn=>{handler=fn;}},Request,Response,URL,FormData,File,Blob,TextDecoder,crypto,structuredClone,atob,console,fetch:async()=>Response.json({id:'synthetic',displayName:'Synthetic',mail:email})});
+  vm.runInNewContext(code,{portalContext:async()=>({user:{email,name:'Synthetic'},administrator:admin,actions}),createClient:()=>db,Deno:{env:{get:()=>''},serve:fn=>{handler=fn;}},Request,Response,URL,FormData,File,Blob,TextDecoder,crypto,structuredClone,atob,console,fetch:async()=>Response.json({id:'synthetic',displayName:'Synthetic',mail:email})});
   return {state,async call(path='/data',{method='GET',body=null,authenticated=true}={}){const headers=authenticated?{Authorization:'Bearer '+token}:{};let requestBody;if(body instanceof FormData)requestBody=body;else if(body!=null){headers['Content-Type']='application/json';requestBody=JSON.stringify(body);}return handler(new Request('https://example.invalid/rh-api'+path,{method,headers,body:requestBody}));}};
 }
 
@@ -75,7 +75,7 @@ test('administrador continua recebendo a base completa',async()=>{const f=fixtur
 test('backend rejeita e-mail individual duplicado',async()=>{const payload=structuredClone(basePayload);payload.funcionarios[1].perfilRh='FUNCIONARIO';payload.funcionarios[1].loginEmail='ana@example.invalid';const f=fixture({admin:true}),r=await f.call('/data',{method:'PUT',body:{data:payload,revision:7}});assert.equal(r.status,409);assert.equal(f.state.writes,0);});
 
 test('interface individual e configuração administrativa estão presentes e o JavaScript é válido',()=>{
-  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');for(const marker of ['const APP_VER = "1.20.2"','Área individual: você está vendo somente seus próprios dados.','employee-home','employee-data','employee-vacations','employee-documents','employee-payslips','Funcionário — vê somente os próprios dados','E-mail exato para entrar no RH','Holerite','/employee-files'])assert.ok(html.includes(marker),marker);for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))if(match[1].trim())new vm.Script(match[1]);
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');for(const marker of ['const APP_VER = "1.21.0"','Área individual: você está vendo somente seus próprios dados.','employee-home','employee-data','employee-vacations','employee-documents','employee-payslips','Funcionário — vê somente os próprios dados','E-mail exato para entrar no RH','Holerite','/employee-files'])assert.ok(html.includes(marker),marker);for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))if(match[1].trim())new vm.Script(match[1]);
 });
 
 
@@ -140,4 +140,32 @@ test('grupos recolhidos ordenam por referência e preservam índices de edição
  assert.equal(groups[0].type,'Holerites');assert.deepEqual(Array.from(groups[0].items,x=>x.i),[2,3,1,5]);assert.deepEqual(Array.from(groups[1].items,x=>x.i),[4,0]);assert.equal(JSON.stringify(docs),original);
  const rendered=ctx.groupedDocuments(docs,(d,i)=>'<button data-edit="'+i+'">'+ctx.documentTitle(d)+'</button>');
  assert.match(rendered,/<details class="document-group"><summary>/);assert.ok(!rendered.includes('<details class="document-group" open'));assert.ok(rendered.indexOf('2026-10 - Holerite')<rendered.indexOf('2025-09 - Holerite'));assert.match(rendered,/data-edit="2">2026-10 - Holerite/);
+});
+
+test('biblioteca bloqueia funcionário mesmo com ações residuais e não aparece na projeção individual',async()=>{
+ const payload=structuredClone(basePayload);payload.bibliotecaRh={categorias:[{id:'secret',nome:'RH'}],documentos:[{id:'SECRET',arquivo:'biblioteca/secret/private.pdf'}]};const f=fixture({payload});
+ for(const [path,method,body] of [['/library','GET'],['/library/files?id=SECRET','GET'],['/library/categories','POST',{revision:7,nome:'Inválido'}],['/library/documents','POST',{revision:7,id:'SECRET',action:'archive'}]])assert.equal((await f.call(path,{method,body})).status,403);
+ assert.equal((await (await f.call()).json()).data.bibliotecaRh,undefined);assert.equal(f.state.writes,0);assert.equal(f.state.signed.length,0);
+ assert.equal((await f.call('/staff-files?path='+encodeURIComponent('biblioteca/secret/private.pdf'))).status,400);
+});
+test('RH gerencia categorias sem excluir grupos ocupados e leitura não permite escrita',async()=>{
+ const f=fixture({admin:true});let r=await f.call('/library');assert.equal((await r.json()).library.categorias.length,3);
+ r=await f.call('/library/categories',{method:'POST',body:{revision:7,nome:'Treinamento'}});assert.equal(r.status,200);const c=(await r.json()).library.categorias.at(-1);
+ assert.equal((await f.call('/library/categories',{method:'POST',body:{revision:8,id:c.id,nome:'Capacitação'}})).status,200);
+ assert.equal((await f.call('/library/categories',{method:'POST',body:{revision:9,nome:'CAPACITAÇÃO'}})).status,409);
+ const read=fixture({email:'rh-reader@example.invalid',actions:['rh.visualizar_documentos','rh.visualizar_dados_basicos']});assert.equal((await read.call('/library')).status,200);assert.equal((await read.call('/library/categories',{method:'POST',body:{revision:7,nome:'Não'}})).status,403);
+ assert.equal((await fixture({email:'basic@example.invalid',actions:['rh.visualizar_dados_basicos']}).call('/library')).status,403);
+});
+function libraryForm(revision=7){const form=new FormData();form.append('revision',String(revision));form.append('titulo','Modelo de contrato');form.append('categoriaId','contratacao');form.append('versao','1.0');form.append('revisao','2026-11-24');form.append('descricao','Modelo em branco');form.append('file',new File(['synthetic template'],'modelo.docx',{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}));return form;}
+test('biblioteca cadastra modelo, preserva anexo na edição, assina download e arquiva sem apagar',async()=>{
+ const f=fixture({admin:true});let r=await f.call('/library/documents',{method:'POST',body:libraryForm()});assert.equal(r.status,200);let d=(await r.json()).library.documentos[0];assert.equal(d.nome,'modelo.docx');assert.match(d.arquivo,/^biblioteca\//);assert.equal(f.state.row.payload.funcionarios[0].documentos.length,1);
+ r=await f.call('/library/documents',{method:'POST',body:{revision:8,id:d.id,titulo:'Contrato revisado',categoriaId:'contratacao',versao:'1.1'}});assert.equal(r.status,200);assert.equal((await r.json()).library.documentos[0].arquivo,d.arquivo);assert.equal(f.state.uploads.length,1);
+ assert.equal((await f.call('/library/files?id='+d.id+'&download=1')).status,200);assert.equal(f.state.signed[0].opt.download,'modelo.docx');assert.equal((await f.call('/library/files?id=missing')).status,404);
+ assert.equal((await f.call('/library/categories',{method:'POST',body:{revision:9,id:'contratacao',action:'delete'}})).status,409);
+ assert.equal((await f.call('/library/documents',{method:'POST',body:{revision:9,id:d.id,action:'archive'}})).status,200);assert.equal(f.state.row.payload.bibliotecaRh.documentos[0].arquivado,true);assert.equal(f.state.removes.length,0);
+ assert.equal((await f.call('/library/documents',{method:'POST',body:{revision:10,id:d.id,action:'restore'}})).status,200);
+});
+test('conflito não perde biblioteca nem deixa upload novo órfão; cliente antigo preserva modelos',async()=>{
+ const f=fixture({admin:true,conflicts:1});assert.equal((await f.call('/library/documents',{method:'POST',body:libraryForm()})).status,409);assert.equal(f.state.writes,0);assert.equal(f.state.removes[0],f.state.uploads[0].path);
+ const payload=structuredClone(basePayload);payload.bibliotecaRh={categorias:[{id:'c',nome:'RH'}],documentos:[]};const old=fixture({admin:true,payload}),incoming=structuredClone(basePayload);incoming.bibliotecaRh={documentos:['forged']};assert.equal((await old.call('/data',{method:'PUT',body:{revision:7,data:incoming}})).status,200);assert.deepEqual(old.state.row.payload.bibliotecaRh,payload.bibliotecaRh);
 });

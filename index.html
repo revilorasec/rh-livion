@@ -285,7 +285,7 @@ const RH_BACKUP_FOLDER = "Backups";
 const DEFAULT_CLIENT_ID = "88cf5cba-9f67-467d-8a51-9638200bed52";
 const DEFAULT_TENANT_ID = "911e1aee-070e-421b-ae71-439f01c2263e";
 const AUTH_REDIRECT_URI = "https://revilorasec.github.io/rh-livion/";
-const APP_VER = "1.20.2";
+const APP_VER = "1.21.0";
 let LOGO_URL = null;
 let cfg = null, msalApp = null, account = null, FOLDER = null, DB = null, dbEtag = null, rawSnapshot = null;
 const thumbCache = new Map(), urlCache = new Map();
@@ -661,6 +661,7 @@ const NAV = [
   {v:"proj",  l:"Projetos",     ic:"proj"},
   {v:"ferias",l:"Férias",       ic:"calendar"},
   {v:"cargos",l:"Cargos",       ic:"cash"},
+  {v:"library",l:"Biblioteca RH",ic:"doc"},
   {v:"mais",  l:"Mais",         ic:"more"},
 ];
 const EMP_NAV = [
@@ -680,10 +681,10 @@ function startApp(){
   render();
   void autoConnectFiles();
 }
-function go(v){ S.view=v; if(v!=="ficha") S.fichaId=null; render(); window.scrollTo(0,0); }
+function go(v){ S.view=v; if(v!=="ficha") S.fichaId=null; render(); if(v==="library")void A.loadLibrary(); window.scrollTo(0,0); }
 function render(){
   const employeeOnly=!!PORTAL_DATA_META?.employeeOnly;
-  const visibleNav = employeeOnly ? EMP_NAV : NAV;
+  const visibleNav = employeeOnly ? EMP_NAV : NAV.filter(n=>n.v!=="library"||canUseLibrary());
   const navHtml = on => visibleNav.map(n=>`<button class="${S.view===n.v||(S.view==="ficha"&&n.v==="func")?"on":""}" onclick="go('${n.v}')">${ICONS[n.ic]}${on?"":"<span>"}${n.l}${on?"":"</span>"}</button>`).join("");
   document.getElementById("snav").innerHTML = navHtml(true);
   document.getElementById("bnav").innerHTML = visibleNav.map(n=>`<button class="${S.view===n.v||(S.view==="ficha"&&n.v==="func")?"on":""}" onclick="go('${n.v}')">${ICONS[n.ic]}${n.l}</button>`).join("");
@@ -699,6 +700,7 @@ function render(){
   else if(S.view==="tabela") html = vTabela();
   else if(S.view==="mapa") html = vMapa();
   else if(S.view==="cargos") html = vCargos();
+  else if(S.view==="library") html = vLibrary();
   else if(S.view==="mais") html = vMais();
   const fileAction = canReadFiles() && filesState!=="ready" ? `<div style="padding:12px 20px"><button class="btn sec sm" onclick="connectFiles()">${filesState==="connecting"?"Conectando arquivos…":"Autorizar arquivos"}</button></div>` : "";
   M.innerHTML = top + fileAction + html;
@@ -1163,6 +1165,12 @@ function vCargos(){
   </div>`;
 }
 
+let LIBRARY=null,LIBRARY_SEARCH='',LIBRARY_ARCHIVED=false,LIBRARY_ERROR='';
+function canUseLibrary(){return !PORTAL_DATA_META?.employeeOnly&&!!(PORTAL_DATA_META?.permissions?.documents||PORTAL_DATA_META?.permissions?.edit);}
+function libraryRows(){if(!LIBRARY)return '';const search=LIBRARY_SEARCH.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const groups=LIBRARY.library.categorias.map(c=>{const docs=LIBRARY.library.documentos.filter(d=>d.categoriaId===c.id&&!!d.arquivado===LIBRARY_ARCHIVED&&[d.titulo,d.nome,d.descricao,c.nome].join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(search)).sort((a,b)=>String(b.revisao||b.atualizadoEm||'').localeCompare(String(a.revisao||a.atualizadoEm||'')));return {c,docs};});return groups.filter(g=>!search||g.docs.length).map(({c,docs})=>`<details class="document-group" open><summary><span>${esc(c.nome)}</span><span class="badge b-info">${docs.length}</span></summary><div class="document-group-body">${docs.map(d=>`<div class="rowitem employee-doc"><div class="inf"><b>${esc(d.titulo)}</b><span>${esc(d.nome)}</span>${d.descricao?`<span>${esc(d.descricao)}</span>`:''}<span>${[d.versao?'Versão '+esc(d.versao):'',d.revisao?'Revisão '+fmtDate(d.revisao):''].filter(Boolean).join(' · ')}</span></div><div class="employee-doc-actions"><button class="btn sec sm" onclick="A.libraryOpen('${d.id}',false)">Abrir</button><button class="btn ghost sm" onclick="A.libraryOpen('${d.id}',true)">Baixar</button>${LIBRARY.edit?`<button class="btn ghost sm" onclick="A.libraryDocument('${d.id}')">Editar</button><button class="btn ghost sm" onclick="A.libraryArchive('${d.id}',${!d.arquivado})">${d.arquivado?'Restaurar':'Arquivar'}</button>`:''}</div></div>`).join('')||'<div class="empty">Nenhum documento nesta categoria.</div>'}</div></details>`).join('')||'<div class="empty">Nenhum documento encontrado.</div>';}
+function vLibrary(){if(!canUseLibrary())return '<div class="empty card">Biblioteca restrita à equipe autorizada do RH.</div>';return `<div class="h1">Biblioteca do RH</div><div class="sub">Modelos de contratação, normas, orientações e comunicados. Após preencher e colher as assinaturas, anexe o documento ao cadastro do funcionário.</div><div class="card"><div class="secttl"><h3>Documentos da empresa</h3><div class="acts"><button class="btn ghost sm" onclick="A.loadLibrary()">Atualizar</button>${LIBRARY?.edit?'<button class="btn sec sm" onclick="A.libraryCategories()">Categorias</button><button class="btn sm" onclick="A.libraryDocument()">Adicionar documento</button>':''}</div></div><div class="readonly-note">Acesso exclusivo do RH. Funcionários veem somente os anexos do próprio cadastro.</div>${LIBRARY_ERROR?`<div class="readonly-note">${esc(LIBRARY_ERROR)}</div>`:''}${LIBRARY?`<div class="fld" style="margin:16px 0"><label for="librarySearch">Buscar documento, arquivo ou categoria</label><input id="librarySearch" type="search" value="${esc(LIBRARY_SEARCH)}" oninput="A.filterLibrary(this.value)"></div><label class="chip"><input type="checkbox" ${LIBRARY_ARCHIVED?'checked':''} onchange="LIBRARY_ARCHIVED=this.checked;render()"> Mostrar arquivados</label><div id="libraryRows">${libraryRows()}</div>`:'<div class="empty">Carregando biblioteca…</div>'}</div>`;}
+
+
 function vMais(){
   const cfgLink = location.origin+location.pathname+`?cid=${encodeURIComponent(cfg.cid)}&tid=${encodeURIComponent(cfg.tid)}&folder=${encodeURIComponent(cfg.folder)}`;
   return `
@@ -1228,6 +1236,17 @@ function confirmar(msg, fn){
 }
 /* ---------------- ações ---------------- */
 const A = {};
+A.loadLibrary=async()=>{if(!canUseLibrary())return;try{LIBRARY_ERROR='';LIBRARY=await rhApi('/library');}catch(e){LIBRARY_ERROR=e.message;}if(S.view==='library')render();};
+A.filterLibrary=value=>{LIBRARY_SEARCH=value;document.getElementById('libraryRows').innerHTML=libraryRows();};
+A.librarySave=async(path,body)=>{try{busy(true);const result=await rhApi(path,{method:'POST',body:body instanceof FormData?body:JSON.stringify(body)});LIBRARY=result;LIBRARY_ERROR='';toast('✅ Biblioteca atualizada');return true;}catch(e){toast('❌ '+e.message);await A.loadLibrary();return false;}finally{busy(false);}};
+A.libraryDocument=(id='')=>{if(!LIBRARY?.edit)return;const d=LIBRARY.library.documentos.find(x=>x.id===id)||{};if(!LIBRARY.library.categorias.length){toast('Cadastre uma categoria primeiro.');A.libraryCategories();return;}openForm(id?'Editar documento':'Adicionar documento à biblioteca',[
+{k:'titulo',label:'Nome de exibição',req:true,full:1},{k:'categoriaId',label:'Categoria',type:'select',opts:LIBRARY.library.categorias.map(c=>[c.id,c.nome]),req:true,full:1},{k:'file',label:id?'Substituir anexo (opcional) — atual: '+d.nome:'Anexo (até 10 MB)',type:'file',accept:'.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp',req:!id,full:1},{k:'descricao',label:'Descrição ou observação',type:'textarea'},{k:'versao',label:'Versão',ph:'Ex.: 1.0'},{k:'revisao',label:'Data de revisão',type:'date'}],d,async values=>{const body=new FormData();body.append('revision',LIBRARY.revision);body.append('id',id);for(const [key,value] of Object.entries(values))if(value!==null&&value!==undefined)body.append(key,value);return A.librarySave('/library/documents',body);});};
+A.libraryArchive=async(id,archive)=>{if(!LIBRARY?.edit)return;if(await A.librarySave('/library/documents',{id,revision:LIBRARY.revision,action:archive?'archive':'restore'}))render();};
+A.libraryOpen=async(id,download)=>{const popup=window.open('about:blank','_blank');try{const j=await rhApi('/library/files?id='+encodeURIComponent(id)+(download?'&download=1':''));if(popup){popup.opener=null;popup.location=j.url;}else location.href=j.url;}catch(e){popup?.close();toast('❌ '+e.message);}};
+A.libraryCategory=(id='')=>{const c=LIBRARY?.library.categorias.find(x=>x.id===id)||{};openForm(id?'Renomear categoria':'Nova categoria',[{k:'nome',label:'Nome da categoria',req:true,full:1}],c,values=>A.librarySave('/library/categories',{id,nome:values.nome,revision:LIBRARY.revision}));};
+A.libraryCategories=()=>{if(!LIBRARY?.edit)return;const ov=document.createElement('div');ov.className='overlay';ov.innerHTML=`<div class="modal"><h3>Categorias da biblioteca</h3><p class="sub">Categorias com documentos, inclusive arquivados, só podem ser excluídas após mover os documentos.</p>${LIBRARY.library.categorias.map(c=>`<div class="rowitem"><div class="inf"><b>${esc(c.nome)}</b></div><button class="btn ghost sm" data-edit="${c.id}">Renomear</button><button class="btn ghost sm" data-delete="${c.id}">Excluir</button></div>`).join('')}<div class="acts"><button class="btn ghost" data-close>Fechar</button><button class="btn" data-new>Nova categoria</button></div></div>`;document.body.appendChild(ov);ov.querySelector('[data-close]').onclick=()=>ov.remove();ov.querySelector('[data-new]').onclick=()=>{ov.remove();A.libraryCategory();};ov.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{ov.remove();A.libraryCategory(b.dataset.edit);});ov.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{if(await A.librarySave('/library/categories',{id:b.dataset.delete,action:'delete',revision:LIBRARY.revision})){ov.remove();render();A.libraryCategories();}});};
+
+
 A.salvarSetup = ()=>{
   const cid = document.getElementById("s_cid").value.trim();
   const tid = document.getElementById("s_tid").value.trim() || "organizations";
@@ -2077,4 +2096,3 @@ boot();
 </script>
 </body>
 </html>
-

@@ -1,3 +1,4 @@
+import { portalContext } from '../_shared/portal-context.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const TENANT_ID='911e1aee-070e-421b-ae71-439f01c2263e';
@@ -21,8 +22,8 @@ function reply(origin:string|null,status:number,data:unknown){return new Respons
 function bearer(req:Request){const v=req.headers.get('authorization')||'';if(!v.startsWith('Bearer ')||v.length>9000)throw new Error('UNAUTHENTICATED');return v.slice(7);}
 function claims(token:string){try{const p=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');return JSON.parse(atob(p));}catch{return {};}}
 function email(value:unknown){return String(value||'').trim().toLowerCase();}
-async function identity(req:Request){const token=bearer(req);const c=claims(token);if(c.tid!==TENANT_ID||(c.azp!==CLIENT_ID&&c.appid!==CLIENT_ID))throw new Error('UNAUTHENTICATED');const r=await fetch('https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName',{headers:{Authorization:`Bearer ${token}`}});if(!r.ok)throw new Error('UNAUTHENTICATED');const me=await r.json();const userEmail=email(me.mail||me.userPrincipalName);if(!me.id||!userEmail)throw new Error('UNAUTHENTICATED');return {id:String(me.id),email:userEmail,name:String(me.displayName||userEmail)};}
-async function rhAccess(req:Request){const me=await identity(req);const q=await db.from('portal_users').select('*').eq('email',me.email).maybeSingle();if(q.error||!q.data||!q.data.active)throw new Error('FORBIDDEN');const u=q.data;const admin=u.profile==='ADMINISTRADOR';const apps=Array.isArray(u.apps)?u.apps:[];if(!admin&&!apps.includes('rh'))throw new Error('FORBIDDEN');const actions=admin?['*']:(Array.isArray(u.actions)?u.actions:[]);return {me,u,admin,actions,userType:String(u.user_type||'INTERNO')};}
+async function identity(req:Request){const context=await portalContext(req,'rh');return {email:context.user.email,name:context.user.name,context};}
+async function rhAccess(req:Request){const me=await identity(req);const q=await db.from('portal_users').select('*').eq('email',me.email).maybeSingle();if(q.error||!q.data||!q.data.active)throw new Error('FORBIDDEN');const u=q.data;const admin=me.context.administrator===true;const apps=Array.isArray(u.apps)?u.apps:[];if(!admin&&!apps.includes('rh'))throw new Error('FORBIDDEN');const actions=admin?['*']:(Array.isArray(me.context.actions)?me.context.actions:[]);return {me,u,admin,actions,userType:String(u.user_type||'INTERNO')};}
 function has(actions:string[],key:string){return actions.includes('*')||actions.includes(key);}
 function canReadDocuments(ctx:any){return ctx.userType==='INTERNO'&&(ctx.admin||has(ctx.actions,'rh.visualizar_documentos')||has(ctx.actions,'rh.editar_funcionarios'));}
 function canWriteDocuments(ctx:any){return ctx.userType==='INTERNO'&&(ctx.admin||has(ctx.actions,'rh.editar_funcionarios'));}
@@ -43,17 +44,53 @@ function employeePayload(payload:any,f:any){
 }
 function employeeReferences(payload:any,f:any){const refs=new Set<string>();const add=(v:any)=>{const p=storedPath(v);if(validStaffPath(p))refs.add(p);};add(f.curriculo);add(f.foto);for(const d of (f.documentos||[]))add(d?.arquivo);for(const h of (payload.holerites||[]))if(String(h.funcionarioId)===String(f.id))add(h?.arquivo);return refs;}
 function vacationReferences(payload:any,f:any){const refs=new Set<string>();const add=(v:any)=>{const p=storedPath(v);if(validVacationPath(p))refs.add(p);};for(const r of (payload.ferias||[])){if(String(r.funcionarioId)!==String(f.id))continue;add(r?.comprovante?.arquivo);for(const p of (r.opcoesFuncionario||[]))for(const a of (p.anexos||[]))add(a?.arquivo);}return refs;}
-function sanitize(payload:any,ctx:any){const x=structuredClone(payload||{});const salary=has(ctx.actions,'rh.visualizar_salarios');const bank=has(ctx.actions,'rh.visualizar_dados_bancarios');const sensitive=has(ctx.actions,'rh.visualizar_dados_sensiveis');const docs=ctx.userType==='INTERNO'&&has(ctx.actions,'rh.visualizar_documentos');if(Array.isArray(x.cargos)&&!salary)x.cargos=x.cargos.map((c:any)=>({...c,salario:null}));if(Array.isArray(x.regrasSalario)&&!salary)x.regrasSalario=x.regrasSalario.map((r:any)=>({...r,salario:null}));if(Array.isArray(x.funcionarios)){x.funcionarios=x.funcionarios.map((f:any)=>{const n={...f};if(!bank)n.bancos=[];if(!docs){n.documentos=[];n.foto=null;n.curriculo=null;}if(!sensitive){const p={...(n.pessoal||{})};['cpf','rg','cnh','pis','tituloEleitor','nascimento','endereco','estadoCivil','tipoSanguineo','emergenciaNome','emergenciaTelefone','emergenciaParentesco','emergencias','dependentes','saude','qualDoenca','quaisMedicamentos','tiposAlergias'].forEach(k=>{if(k in p)p[k]=null;});n.pessoal=p;n.observacoes=null;n.avaliacao=null;}return n;});}return x;}
+function sanitize(payload:any,ctx:any){const x=structuredClone(payload||{});delete x.bibliotecaRh;const salary=has(ctx.actions,'rh.visualizar_salarios');const bank=has(ctx.actions,'rh.visualizar_dados_bancarios');const sensitive=has(ctx.actions,'rh.visualizar_dados_sensiveis');const docs=ctx.userType==='INTERNO'&&has(ctx.actions,'rh.visualizar_documentos');if(Array.isArray(x.cargos)&&!salary)x.cargos=x.cargos.map((c:any)=>({...c,salario:null}));if(Array.isArray(x.regrasSalario)&&!salary)x.regrasSalario=x.regrasSalario.map((r:any)=>({...r,salario:null}));if(Array.isArray(x.funcionarios)){x.funcionarios=x.funcionarios.map((f:any)=>{const n={...f};if(!bank)n.bancos=[];if(!docs){n.documentos=[];n.foto=null;n.curriculo=null;}if(!sensitive){const p={...(n.pessoal||{})};['cpf','rg','cnh','pis','tituloEleitor','nascimento','endereco','estadoCivil','tipoSanguineo','emergenciaNome','emergenciaTelefone','emergenciaParentesco','emergencias','dependentes','saude','qualDoenca','quaisMedicamentos','tiposAlergias'].forEach(k=>{if(k in p)p[k]=null;});n.pessoal=p;n.observacoes=null;n.avaliacao=null;}return n;});}return x;}
 async function audit(actor:string,action:string,target:string,detail:any={}){await db.from('access_audit').insert({actor_email:actor,action,target,detail});}
+
+function libraryData(payload:any){return payload.bibliotecaRh||{categorias:[{id:'contratacao',nome:'Contratação — assinatura'},{id:'orientacoes',nome:'Normas e orientações'},{id:'comunicados',nome:'Comunicados e avisos'}],documentos:[]};}
+function libraryAccess(payload:any,ctx:any,write=false){if((!ctx.admin&&linkedEmployee(payload,ctx,false))||!(write?canWriteDocuments(ctx):canReadDocuments(ctx)))throw new Error('FORBIDDEN');}
+function libraryFileMeta(file:File){const ext=String(file.name.split('.').pop()||'').toLowerCase(),types:Record<string,string>={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xls:'application/vnd.ms-excel',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp'};if(!file.size||file.size>MAX_FILE_SIZE)throw new Error('ARQUIVO_INVALIDO');if(!types[ext])throw new Error('FORMATO_INVALIDO');return {ext,mime:types[ext],baseName:safePart(file.name.replace(/\.[^.]+$/,''),'documento')};}
+
 
 Deno.serve(async(req)=>{
   const origin=req.headers.get('origin');
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors(origin)});
   try{
     const url=new URL(req.url),base='/rh-api',i=url.pathname.indexOf(base),path=i>=0?url.pathname.slice(i+base.length)||'/':'/';
-    if(path==='/health'&&req.method==='GET')return reply(origin,200,{ok:true,service:'rh-api',version:21});
+    if(path==='/health'&&req.method==='GET')return reply(origin,200,{ok:true,service:'rh-api',version:23});
     const ctx=await rhAccess(req);
     if(ctx.userType!=='INTERNO')throw new Error('FORBIDDEN');
+
+    if(path==='/library'&&req.method==='GET'){
+      const current=await row();libraryAccess(current.payload,ctx);return reply(origin,200,{ok:true,library:libraryData(current.payload),revision:current.revision,edit:canWriteDocuments(ctx)});
+    }
+    if(path==='/library/files'&&req.method==='GET'){
+      const current=await row();libraryAccess(current.payload,ctx);const item=libraryData(current.payload).documentos.find((d:any)=>d.id===url.searchParams.get('id'));if(!item)return reply(origin,404,{error:'Documento não encontrado'});
+      if(!/^biblioteca\/[A-Za-z0-9_-]+\/[A-Za-z0-9._-]+$/.test(item.arquivo))throw new Error('FORBIDDEN');const signed=await db.storage.from(STAFF_BUCKET).createSignedUrl(item.arquivo,120,{download:url.searchParams.get('download')==='1'?item.nome:false});if(signed.error)throw signed.error;await audit(ctx.me.email,'RH_LIBRARY_OPEN',item.id);return reply(origin,200,{ok:true,url:signed.data.signedUrl});
+    }
+    if((path==='/library/categories'||path==='/library/documents')&&req.method==='POST'){
+      const current=await row();libraryAccess(current.payload,ctx,true);const multipart=req.headers.get('content-type')?.includes('multipart/form-data'),form=multipart?await req.formData():null,body=form?Object.fromEntries(form.entries()):await req.json();
+      if(!Number.isSafeInteger(Number(body.revision))||body.revision===null||body.revision===undefined||Number(body.revision)!==current.revision)return reply(origin,409,{error:'A base foi alterada. Atualize a biblioteca antes de salvar.'});
+      const library=structuredClone(libraryData(current.payload));let uploaded:string|null=null;let recordId='';
+      if(path==='/library/categories'){
+        const id=String(body.id||''),index=library.categorias.findIndex((c:any)=>c.id===id);if(id&&index<0)return reply(origin,404,{error:'Categoria não encontrada'});
+        if(body.action==='delete'){if(library.documentos.some((d:any)=>d.categoriaId===id))return reply(origin,409,{error:'Mova os documentos desta categoria antes de excluí-la.'});if(index<0)return reply(origin,400,{error:'Categoria inválida'});library.categorias.splice(index,1);recordId=id;}
+        else {const nome=String(body.nome||'').trim();if(!nome||nome.length>100)return reply(origin,400,{error:'Informe um nome de categoria de até 100 caracteres.'});if(library.categorias.some((c:any)=>c.id!==id&&c.nome.localeCompare(nome,'pt-BR',{sensitivity:'base'})===0))return reply(origin,409,{error:'Esta categoria já existe.'});const rec={id:id||crypto.randomUUID(),nome};if(index<0)library.categorias.push(rec);else library.categorias[index]=rec;recordId=rec.id;}
+      }else{
+        const id=String(body.id||''),index=library.documentos.findIndex((d:any)=>d.id===id);if(id&&index<0)return reply(origin,404,{error:'Documento não encontrado'});const old=index>=0?library.documentos[index]:null;
+        if(body.action==='archive'||body.action==='restore'){if(!old)return reply(origin,404,{error:'Documento não encontrado'});old.arquivado=body.action==='archive';old.atualizadoEm=new Date().toISOString();recordId=id;}
+        else{
+          const titulo=String(body.titulo||'').trim(),categoriaId=String(body.categoriaId||''),descricao=String(body.descricao||'').trim(),versao=String(body.versao||'').trim(),revisao=String(body.revisao||'');
+          if(!titulo||titulo.length>160||descricao.length>4000||versao.length>80||!library.categorias.some((c:any)=>c.id===categoriaId)||revisao&&!/^\d{4}-\d{2}-\d{2}$/.test(revisao))return reply(origin,400,{error:'Confira nome, categoria, versão e data de revisão.'});
+          const file=form?.get('file');if(!(file instanceof File)&&!old)return reply(origin,400,{error:'Anexe um arquivo.'});recordId=old?.id||crypto.randomUUID();let fileInfo=old?{arquivo:old.arquivo,nome:old.nome,tamanho:old.tamanho,mime:old.mime}:{};
+          if(file instanceof File){const {ext,mime,baseName}=libraryFileMeta(file);uploaded=`biblioteca/${recordId}/${crypto.randomUUID()}_${baseName}.${ext}`;const up=await db.storage.from(STAFF_BUCKET).upload(uploaded,file,{contentType:mime,upsert:false});if(up.error)throw up.error;fileInfo={arquivo:uploaded,nome:file.name,tamanho:file.size,mime};}
+          const rec={...old,...fileInfo,id:recordId,titulo,categoriaId,descricao,versao,revisao:revisao||null,arquivado:old?.arquivado||false,criadoEm:old?.criadoEm||new Date().toISOString(),atualizadoEm:new Date().toISOString(),atualizadoPor:ctx.me.email};if(index<0)library.documentos.push(rec);else library.documentos[index]=rec;
+        }
+      }
+      const payload={...current.payload,bibliotecaRh:library};const saved=await db.from('portal_rh_data').update({payload,revision:current.revision+1,updated_at:new Date().toISOString(),updated_by:ctx.me.email}).eq('id',1).eq('revision',current.revision).select('revision').maybeSingle();if(saved.error||!saved.data){if(uploaded)await db.storage.from(STAFF_BUCKET).remove([uploaded]);if(saved.error)throw saved.error;return reply(origin,409,{error:'A base foi alterada. Atualize a biblioteca antes de salvar.'});}
+      await audit(ctx.me.email,'RH_LIBRARY_SAVE',recordId,{operation:body.action||'save',resource:path});return reply(origin,200,{ok:true,library,revision:current.revision+1,edit:true});
+    }
+
 
     if(path==='/vacation-files'&&req.method==='POST'){
       const current=await row();if((!ctx.admin&&linkedEmployee(current.payload,ctx,false))||!canWriteDocuments(ctx))throw new Error('FORBIDDEN');
@@ -163,7 +200,7 @@ Deno.serve(async(req)=>{
       if(ctx.admin||has(ctx.actions,'rh.visualizar_documentos'))safe.push('foto','curriculo','documentos');if(ctx.admin||has(ctx.actions,'rh.visualizar_dados_sensiveis'))safe.push('pessoal','avaliacao','obsAvaliacao','motivosObs','observacoes');if(ctx.admin||has(ctx.actions,'rh.visualizar_dados_bancarios'))safe.push('bancos');
       const byId=new Map((current.payload.funcionarios||[]).map((f:any)=>[String(f.id),f]));const funcionarios=(incoming.funcionarios||[]).map((f:any)=>{const old=byId.get(String(f.id));if(!old)return {...f,pessoal:f.pessoal||{},bancos:f.bancos||[],documentos:f.documentos||[],projetos:f.projetos||[]};const n={...old};safe.forEach(k=>{if(k in f)n[k]=f[k];});return n;});
       const linked=new Map<string,string>();for(const f of funcionarios){if(!isEmployeeAccess(f))continue;const e=email(f.loginEmail);if(!/^\S+@\S+\.\S+$/.test(e))return reply(origin,400,{error:`E-mail de acesso inválido em ${f.nome||f.id}`});if(linked.has(e))return reply(origin,409,{error:'O mesmo e-mail de acesso está vinculado a mais de um funcionário.'});linked.set(e,String(f.id));}
-      const payload={...current.payload,...incoming,funcionarios,cargos:current.payload.cargos||[],regrasSalario:current.payload.regrasSalario||[],projetos:current.payload.projetos||[],clientes:current.payload.clientes||[]},next=body.revision+1;
+      const payload={...current.payload,...incoming,bibliotecaRh:current.payload.bibliotecaRh,funcionarios,cargos:current.payload.cargos||[],regrasSalario:current.payload.regrasSalario||[],projetos:current.payload.projetos||[],clientes:current.payload.clientes||[]},next=body.revision+1;
       const saved=await db.from('portal_rh_data').update({payload,revision:next,updated_at:new Date().toISOString(),updated_by:ctx.me.email}).eq('id',1).eq('revision',body.revision).select('revision').maybeSingle();if(saved.error)throw saved.error;if(!saved.data)return reply(origin,409,{error:'A base foi alterada. Recarregue antes de salvar.'});await audit(ctx.me.email,'RH_DATA_SAVE','RH',{revision:next});return reply(origin,200,{ok:true,revision:next});
     }
     if(path==='/bootstrap'&&req.method==='POST'){
